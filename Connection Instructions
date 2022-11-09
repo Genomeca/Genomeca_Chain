@@ -1,0 +1,45 @@
+Creating a new blockchain
+To create a new blockchain called [chain-name] based on MultiChain’s default blockchain parameters, run:
+
+multichain-util create [chain-name]
+
+Alternatively, to create a new blockchain based on the parameters of an existing chain [old-name], run:
+
+multichain-util clone [old-name] [chain-name]
+
+Any parameter can be set on the command line using a flag with the same name, for example:
+
+multichain-util create [chain-name] -maximum-block-size=16777216
+
+Finally, to create a blockchain using a previous version of the MultiChain protocol, run the command below. This will enable older versions of MultiChain to connect to the chain, but disable any features which require the new protocol:
+
+multichain-util create [chain-name] 10011  (for compatibility with MultiChain 1.0.x)
+
+In all cases, a new directory ~/.multichain/[chain-name]/ will be created, with a params.dat file inside. (Note that you can change this ~/.multichain/ path using the -datadir= option, and %APPDATA%\MultiChain\ is the equivalent on Windows.) The params.dat file contains many settings and can be edited using any text editor – see blockchain parameters for a comprehensive list.
+
+Once the settings are finalized, start the blockchain running in the background by issuing the following command:
+
+multichaind [chain-name] -daemon
+
+This will lock the contents of params.dat, initialize the blockchain, and cause the first (genesis) block to be created. A node address such as chain1@12.34.56.78:8571 will be output, to allow other nodes to easily connect. (This can also be obtained via the getinfo call.)
+
+To begin with, the MultiChain node that created the chain has a single address which is granted all permissions, including administration. block creation can proceed using this node only until the end of the setup phase, as defined by the setup-first-blocks parameter in params.dat. At the end of the setup phase, block creation will proceed according to the mining-diversity and mining-requires-peers settings.
+
+Connecting to a blockchain
+To connect to an existing blockchain for the first time, first obtain the node address from any node which is already connected. The node address is shown whenever multichaind starts up or can be obtained using the getinfo API call. Connect using the node address as follows:
+
+multichaind chain1@12.34.56.78:8571 -daemon
+
+If the blockchain is private, you will not be able to connect immediately, because you have not yet been granted permission by an administrator. In this case, a message will be output on the screen containing your address, which you should send to one of the chain’s administrators. After permission has been granted, you can immediately reconnect to chain1 using the shorter form:
+
+multichaind chain1 -daemon
+
+Once you are successfully connected to a blockchain, all of its params.dat parameters are automatically downloaded and verified. Your node will begin downloading and verifying the blockchain, and discovering and connecting to other peers within that blockchain’s network.
+
+Reconnecting to a blockchain
+You may need to restart multichaind if a server is rebooted or the stop command was issued through the API. In this case it can be relaunched just with the chain name, e.g.:
+
+multichaind chain1 -daemon
+
+Next steps
+Once you have a blockchain node up and running, you can start issuing commands to your node using multichain-cli, or by sending JSON-RPC requests. See the JSON-RPC API documentation for more details or getting started for some ideas.
