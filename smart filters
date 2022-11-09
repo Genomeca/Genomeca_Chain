@@ -1,0 +1,188 @@
+A Smart Filter is a piece of code which is embedded in the blockchain, and which allows custom rules to be defined regarding the validity of transactions or stream items. Smart Filters are written in JavaScript and run within a deterministic version of Google’s V8 JavaScript engine, which is embedded directly within MultiChain 2. This is the same JavaScript engine used in Chrome, Node.js and many other platforms. It offers excellent performance by compiling JavaScript to machine code and optimizing that code as it runs.
+
+Smart Filter Types
+MultiChain 2 supports two types of Smart Filters:
+
+Transaction filters. These define rules about whether a transaction is valid, by examining that transaction’s inputs, outputs and metadata. A transaction which does not pass this filter, or a block containing such a transaction, will be independently rejected by every node on the chain.
+Stream filters. These define rules about whether a stream item is valid, by examining its (on-chain or off-chain) data together with the item’s publishers and keys. Stream items which do not pass this filter cannot be published through MultiChain’s APIs, and will have their data hidden and be flagged with an error in all stream retrieval APIs.
+Filters can also retrieve variable values, check the permissions of addresses, get information about assets and streams, and obtain key information about previous blocks in the chain.
+
+Smart Filter Functions
+Smart Filters are written as JavaScript functions with fixed names, but obtain all the information they need using callbacks (which explicitly request some information) rather than function parameters. This prevents time being wasted on preparing information for filters that they do not need.
+
+Some callbacks, such as getlastblockinfo() and verifypermission(), are shared with the node’s JSON-RPC API. Others, such as getfiltertransaction(), getfilterstreamitem() and getfiltertxinput() are for use within filters only. A full list of callbacks is provided below.
+
+If a filter does not allow a transaction or stream item, the function should return a non-empty string containing an explanation for the rejection. When sending a transaction using a JSON-RPC API command such as send or publish, this will be shown in the error response for that command. If a JavaScript error occurs while running the filter, then the transaction will not pass the filter, and the JavaScript error will be displayed in the same way.
+
+If the filter function returns anything other than a non-empty string, or completes returning no value at all, then the transaction or item is accepted. If a JavaScript error is encountered while compiling the filter (not possible if the filter was created using MultiChain’s regular APIs) then the filter will also be ignored. Filters also have protections against infinite loops – see the section about timeouts below.
+
+The MultiChain Web Demo provides a web-based interface for writing, testing and activating Smart Filters. Some example filters are available.
+
+Creating Transaction Filters
+As mentioned above, transaction filters define rules about whether transactions are valid and are independently checked by every node on the chain. Below is an example (trivial) transaction filter that rejects transactions with less than one output:
+
+function filtertransaction()
+{
+    var tx=getfiltertransaction();
+    if (tx.vout.length<1)
+        return "At least one output required";
+}
+
+This example demonstrates three key principles of transaction filters:
+
+They must define a function named filtertransaction().
+Information about the transaction is obtained using the getfiltertransaction() callback rather than function parameters.
+If the transaction is rejected, a non-empty explanatory string should be returned.
+Some more examples are available here.
+
+The testtxfilter API command helps with developing transaction filters, before they are deployed to the chain. The behavior of a filter for any transaction can be tested by passing testtxfilter the raw hexadecimal for that transaction or the txid of a past transaction. However, the filter code uses the getfiltertxinput() or getfilterassetbalances() callbacks, it can only be tested on new and not-yet-sent raw transactions. These can be created using the createrawsendfrom command with sign passed in the action parameter – see raw transactions for more details.
+
+Once a transaction filter is ready for deployment, use the create txfilter command to add it to the blockchain, ready for activation. This can only be done by addresses with admin and create permissions. When a transaction filter is created, it can be restricted to certain assets and/or streams, meaning that it will only be applied to transactions referencing one of those entities. Transaction filters on the chain can be queried using the listtxfilters and getfiltercode commands, and tested on transactions using runtxfilter.
+
+To activate a transaction filter, it should be approved using the approvefrom command by a sufficient number of administrators. This number is determined by the admin-consensus-txfilter blockchain parameter multiplied by the number of addresses with admin permissions. Once the filter is approved in the blockchain, any subsequent transactions must pass the filter in order to be considered valid.
+
+To deactivate a transaction filter, apply the same process using approvefrom, but passing false instead of true in the third parameter. A transaction filter can effectively be “updated” by creating and activating a new filter, then deactivating the old one.
+
+See the API documentation for more details on these commands or use the MultiChain Web Demo for an easy web-based interface.
+
+Creating Stream Filters
+As mentioned above, stream filters define rules about whether stream items are valid and are independently checked by every node when retrieving data from a stream. Below is an example (trivial) stream filter that rejects items with less than two keys:
+
+function filterstreamitem()
+{
+    var item=getfilterstreamitem();
+    if (item.keys.length<2)
+        return "At least two keys required";
+}
+
+This example demonstrates three key principles of stream filters:
+
+They must define a function named filterstreamitem().
+Information about the item is obtained using the getfilterstreamitem() callback rather than function parameters.
+If the item is rejected, a non-empty explanatory string should be returned.
+Some more examples are available here.
+
+The teststreamfilter API command helps with developing stream filters, before they are deployed to the chain. The behavior of a filter for any item can be tested by passing teststreamfilter the raw hexadecimal for that item’s transaction, or the txid of a past publish transaction. If a transaction publishes multiple stream items, also pass the index of the output containing the item to be tested.
+
+Once a stream filter is ready for deployment, use the create streamfilter command to add it to the blockchain, ready for activation on the desired streams. This can only be done by addresses with create permissions. Stream filters on the chain can be queried using the liststreamfilters and getfiltercode commands, and tested on transactions using runstreamfilter.
+
+To activate a filter on a stream, it should be approved using the approvefrom command by an address with admin permissions for that stream (by default, the stream’s creator). This is achieved by passing a {"for":"stream1", "approve":true} structure in the third parameter to approvefrom. The set of filters active for a particular stream can be queried using the liststreams command with verbose=true.
+
+Once a filter is approved for a stream, any subsequent items in that stream must pass the filter in order to be considered valid. Note that, unlike transaction filters, stream filters cannot prevent transactions or blocks from being accepted by nodes. Instead, stream filters are checked when retrieving items from a stream using APIs such as liststreamitems. In the responses to these APIs, invalid items show up with "available":false and "data":null and include an error field containing the filter’s rejection message.
+
+To deactivate a stream filter, apply the same process using approvefrom, but passing "approve":false instead of "approve":true as part of the third parameter. A filter on a stream can effectively be “updated” by creating a new stream filter, then activating this new filter on the stream and deactivating the old one.
+
+See the API documentation for more details on these commands or use the MultiChain Web Demo for an easy web-based interface.
+
+Smart Filter Callbacks
+Optional parameters are denoted in (round brackets) below.
+
+Callbacks shared with JSON-RPC API
+The following Smart Filter callbacks are also available as JSON-RPC API commands:
+
+Function	Parameters	Description
+getassetinfo	asset
+(verbose=false)	Returns an object describing a single asset issued on the blockchain.
+getlastblockinfo	(skip=0)	Returns an object describing the last or recent blocks in the active chain, including timestamps.
+getvariablehistory	variable
+(verbose=false)
+(count=MAX)
+(start=-count)	Protocol version 20012+. Lists the historical values of variable, including information about the writers and transactions which set the variable’s values. Use count and start to retrieve part of the list only, with negative start values (like the default) indicating the most recent values.
+getvariableinfo	variable
+(verbose=false)	Protocol version 20012+. Returns an object describing a single variable created on the blockchain.
+getvariablevalue	variable	Protocol version 20012+. Returns the latest value of variable.
+getstreaminfo	stream
+(verbose=false)	Returns an object describing a single stream created on the blockchain.
+verifymessage	address
+signature
+message	Verifies that message was approved by the owner of address by checking the base64-encoded digital signature provided by a previous call to signmessage. Returns true or false unless an error occurred.
+verifypermission	address
+permission	Checks whether the specified address has the specified permission, returning true or false.
+See the API documentation for more details on these shared commands.
+
+Callbacks for filters only
+Function	Parameters	Description
+getfilterassetbalances	asset
+(raw=false)	Transaction filters only. Returns an object showing the changes in addresses’ balances of asset caused by the transaction. Each element in the object takes the form "address":balance, where balance is positive or negative as appropriate, and shown in display units or raw (integer) units depending on the raw parameter. Note that if a filter uses this function, it cannot be tested (using testtxfilter or runtxfilter) on a transaction that has already been sent – in this case, getfilterassetbalances will return null.
+getfiltertransaction		Returns an object describing the transaction being filtered, formatted like the output of the decoderawtransaction API. Any asm or hex fields in an output which are larger than the maxshowndata filter parameter (see setfilterparam below) will be replaced by a {"size":123} object. Any data fields which are larger than maxshowndata will be replaced by an object describing their format and size.
+getfilterstream		Stream filters only, protocol version 20012+. Returns an object describing the stream containing the item being filtered.
+getfilterstreamitem		Stream filters only. Returns an object describing the stream item being filtered. If an item’s data is larger than the maxshowndata filter parameter (see setfilterparam below), it will be replaced by null.
+getfiltertxid		Returns the txid of the transaction being filtered.
+getfiltertxinput	vin	Transaction filters only. Returns an object describing the UTXO (unspent transaction output) spent in input number vin of the transaction being filtered, formatted like the output of the gettxout API. Any asm or hex fields in an output description which are larger than the maxshowndata filter parameter (see setfilterparam below) will be replaced by a {"size":123} object. Any data fields which are larger than maxshowndata will be replaced by an object describing their format and size. Note that if a filter uses this function, it cannot be tested (using testtxfilter or runtxfilter) on a transaction that has already been sent – in this case, getfiltertxinput will return null.
+setfilterparam	param
+value	Sets the effective value of the runtime parameter param to value for the duration of this filter call only. For now, only the maxshowndata parameter is supported, which controls how much data will be included in callback responses as part of a transaction’s or output’s description. By default, the maxshowndata for filter callbacks is 16384, independent of any individual’s node’s value for the runtime parameter.
+Callback errors
+If a callback function is called with invalid parameters, it will return the undefined JavaScript value. This can be tested using JavaScript’s triple equals operator, e.g. if (getassetinfo("asset1")===undefined) { ... }.
+
+To obtain more information on callback errors during development, use the testtxfilter, runtxfilter, teststreamfilter and runstreamfilter API commands which provide a detailed log of each callback call, including its parameters, response, and any error encountered.
+
+Smart Filter Determinism
+In order to ensure that Smart Filters give the same answer on every node, and to ensure this can be achieved on unknown future computer architectures, the following JavaScript features are unavailable in filter code:
+
+Checking the time, i.e. Date.now() is undefined.
+Random numbers, i.e. Math.random() is undefined.
+Complex math functions, i.e. Math.sin() and many other similar functions are undefined.
+External services. There is no access to network, disk or other processes.
+Multithreading. All filter code executes sequentially, preventing unpredictable race conditions.
+In addition, each filter uses a separate JavaScript context, and a new context is created for each filter at the start of every block.
+
+Smart Filter Timeouts
+A badly written filter could enter into an infinite loop, in which the computation defined by the filter for a particular transaction or stream item never completes. Since there is no way to predict this without actually running the code, MultiChain offers several layers of infinite loop protection:
+
+Filter approvals. Every filter must be approved before it becomes active, by the blockchain or stream administrator(s) as appropriate. In both cases getfiltercode can be used to review the filter code first.
+Timeout on send. Before sending a transaction (possibly containing stream items), a node validates the transaction using the appropriate transaction and/or stream filters. If any filter runs for longer than the node’s sendfiltertimeout runtime parameter (in milliseconds), its execution will be aborted, the transaction will not be sent and an error will be returned.
+Timeout on accept. When receiving an unconfirmed transaction over the network, a node checks that transaction with any appropriate transaction filters. If any filter runs for longer than the node’s acceptfiltertimeout runtime parameter (in milliseconds), its execution will be aborted and the transaction will not be accepted into the node’s memory pool.
+Timeout on stream retrieve. When retrieving an item from a stream, a node validates it with any appropriate stream filters. If any filter runs for longer than the node’s acceptfiltertimeout runtime parameter, its execution will be aborted and the stream item will be flagged with an error.
+Note however that timeouts are not applied when using transaction filters to validate the transactions in a block. This is necessary because timeouts are non-deterministic, and it is crucial that every node comes to the same conclusion about whether a particular block is valid.
+
+Tips for Smart Filter development
+Libraries. From MultiChain 2.1, libraries can be created on the blockchain to define custom Javascript functions for use in filters. Libraries can be shared by multiple filters and must be explicitly included at the time of filter creation. Unlike filters, the code in libraries can be updated after creation, both locally for testing and permanently on the blockchain, optionally subject to administrator consensus. (To preserve determinism, a library update only applies for transactions after the update is approved.) To make an effectively updateable filter, put all of the filter’s logic in a library function, and turn the filter into a "stub" that simply calls this function.
+Custom permissions. MultiChain 2 now supports six global custom permissions. These have no meaning to MultiChain itself but can be used to assign roles to addresses, and then check those roles within Smart Filters. The high1, high2 and high3 permissions of addresses can be set by users with admin permissions. The low1, low2 and low3 permissions can be set by users with admin or activate permissions.
+Validating stream items. Either transaction or stream filters can be used to validate stream items, with different advantages and disadvantages. A transaction filter provides an ironclad guarantee that invalid stream items cannot enter the blockchain, at the cost of requiring every node (including those not subscribed to the stream) to apply the filter for every transaction involving the stream. A stream filter is only applied by nodes subscribed to a stream, and so is more efficient, but cannot prevent malicious nodes from publishing invalid data (which will subsequently be ignored by stream subscribers). Note also that transaction filters cannot perform validation of off-chain data, since that data does not appear inside the transaction itself, whereas stream filters can validate both on-chain or off-chain data.
+Checking the time. Since Smart Filters must give the same result on every node, they cannot query the time directly. An approximation of the current time is the timestamp in the most recent block’s header, given by the time field of the getlastblockinfo() callback. So long as blocks are being continually created by multiple nodes, this will be accurate to within a few minutes at worst. More sophisticated filters can take the average timestamp of many of the last blocks and adjust accordingly based on the chain’s target-block-time.
+Inline metadata. MultiChain 2 allows inline metadata to be included inside transaction outputs containing assets. (This is different from regular transaction metadata or stream items, both of which use a separate output.) Inline metadata can be used together with transaction filters to represent assets with special restrictions, such as who can spend the asset and when. Inline metadata can be in binary, JSON or text format and is shown by the getfiltertransaction() and getfiltertxinput() callbacks.
+Rescuing filter disasters. Transactions generated by the approvefrom command which disapprove a filter, and do nothing else, will bypass any transaction filters active on the chain. This provides an “emergency escape” option in the event that a buggy filter is blocking all transactions.
+Integers preferred. If possible, it is recommended to use integer rather than floating point arithmetic for calculations within Smart Filters. This allows results to be obtained with perfect precision, without depending on how MultiChain might implement JavaScript floating point calculations in future protocol versions. To make this easier, all asset quantities provided by the getfilterassetbalances, getfiltertransaction() and getfiltertxinput() callbacks are also available as raw integer quantities of the smallest transactable unit.
+Smart Filter Tutorial
+Below is an example set of multichain-cli commands that demonstrate the creation and application of a transaction filter and a smart filter.
+
+First, run listpermissions admin and copy and paste the displayed address here: 
+1...
+
+Now create a transaction filter that prevents new streams being created:
+
+create txfilter filter1 '{}' 'function filtertransaction() { var tx=getfiltertransaction(); if (tx.create) return "Stream creation temporarily disabled"; }'
+
+See the filter listed, retrieve its code and approve it:
+
+listtxfilters
+getfiltercode filter1
+approvefrom 1... filter1 true
+
+Attempt to perform a stream creation transaction that the filter blocks:
+
+createfrom 1... stream stream1 true
+
+An error should be shown. Now disable the filter and try to create a stream again:
+
+approvefrom 1... filter1 false
+createfrom 1... stream stream1 true
+
+Now that we’ve successfully created a stream, let’s create a stream filter that insists stream items have more than one key:
+
+create streamfilter filter2 '{}' 'function filterstreamitem() { var item=getfilterstreamitem(); if (item.keys.length<2) return "At least two keys required"; }'
+
+See the filter listed, approve it on the stream, and see its status there:
+
+liststreamfilters
+approvefrom 1... filter2 '{"for":"stream1","approve":true}'
+liststreams stream1 true
+
+Attempt to publish a stream item with only one key that the filter blocks:
+
+publish stream1 key1 012345
+
+Again, an error should be shown. Now disable the filter and publish the same item again:
+
+approvefrom 1... filter2 '{"for":"stream1","approve":false}'
+publish stream1 key1 012345
