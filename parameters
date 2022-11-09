@@ -1,0 +1,107 @@
+Configuring a blockchain
+The parameters of a blockchain are configured after creating the chain by running multichain-util create [chain-name], and before starting the chain by running multichaind [chain-name].
+
+Parameters are set in the params.dat file for each blockchain, which can be modified in any text editor. Once the blockchain is initialized, most of these parameters cannot be changed. However, a small number can be updated using the blockchain upgrade mechanism and are marked as Upgradable below. To prevent accidental modification, a hash of the parameters is added to params.dat when the chain starts running.
+
+When new nodes attempt to connect to an existing blockchain, they first download a minimal set of blockchain parameters from the existing node, and write them to the params.dat file in the appropriate directory. Once they are granted permission to connect, they are able to download the full set of blockchain parameters.
+
+The parameters for a blockchain can be retrieved using the getblockchainparams API call.
+
+Full list of blockchain parameters
+Below is a full list of parameters in the params.dat file, grouped by section.
+
+Basic chain parameters
+Parameter	Description	Default
+chain-protocol	Use multichain for a MultiChain blockchain or bitcoin for a bitcoin-style blockchain with no permissions, assets, streams or filters.	multichain
+chain-description	Textual description of the blockchain for display to users.	—
+root-stream-name	Name of the root stream for general data storage (leave blank for none).	root
+root-stream-open	Allow anyone with send permissions to write to the root stream.	true
+chain-is-testnet	Whether to set testnet to true in the output of various JSON-RPC API calls. This is for compatibility with Bitcoin Core and does not affect any other testnet-like behavior.	false
+target-block-time	Upgradable. Target average number of seconds between blocks, i.e. delay for confirming transactions. If set below 10 seconds, it is recommended to set mining-turnover low, to minimize the number of forks.	15
+maximum-block-size	Upgradable. Maximum number of bytes in each block, to prevent network flooding.	8388608 (8MB)
+maximum-chunk-size	Upgradable. Maximum size in bytes per chunk (used to deliver off-chain stream items).	1048576
+maximum-chunk-count	Upgradable. Maximum number of chunks in a single off-chain item.	1024
+Global permissions
+Parameter	Description	Default
+anyone-can-connect	Upgradable. Apply no restriction to connecting to the network, i.e. any node can connect.	false
+anyone-can-send	Upgradable. Apply no restriction to sending transactions, i.e. signing transaction inputs.	false
+anyone-can-receive	Upgradable. Apply no restriction to receiving transactions, i.e. appearing in transaction outputs.	false
+anyone-can-receive-empty	Upgradable. Apply no restriction to addresses which appear in transaction outputs containing no native currency, assets or other metadata. Only relevant if anyone-can-receive=false. This allows addresses without receive permission to include an empty change output, e.g. to publish to streams.	true
+anyone-can-create	Upgradable. Apply no restriction to creating new streams.	false
+anyone-can-issue	Upgradable. Apply no restriction to issuing (creating) new native assets.	false
+anyone-can-mine	Apply no restriction to adding blocks to the chain, i.e. confirming transactions. Note that if this setting is true then mining-diversity cannot be applied.	false
+anyone-can-activate	Upgradable. Apply no restriction to changing connect, send and receive permissions of other users.	false
+anyone-can-admin	Apply no restriction to changing all permissions of other users.	false
+support-miner-precheck	Support advanced permission checks on block creators by caching the inputs spent by an administrator when setting admin or mine permissions – see permissions management for more information.	true
+allow-arbitrary-outputs	Allow outputs with non-standard scripts, which can bypass receive permissions for receiving funds.	false
+allow-p2sh-outputs	Allow pay to scripthash outputs, where the redeem script is only revealed when an output is spent. See permissions management for more information about permissions and P2SH addresses.	true
+allow-multisig-outputs	Allow multisignature outputs, where more than one address is explicitly listed in a transaction output, and a given number of these addresses are required to sign in order to spend that output. See permissions management for more information about permissions and multisig outputs.	true
+Consensus requirements
+Parameter	Description	Default
+setup-first-blocks	Length of initial setup phase in blocks. During the setup phase, the constraints specified by the other parameters in this section are not applied.	60
+mining-diversity	Minimum proportion of permitted “miners” required to participate in the round-robin scheme to render a valid blockchain, between 0.0 (no constraint) and 1.0 (every address with mine permissions must participate). If less than this proportion of addresses with mine permissions are active on the network, your chain will become stuck. Unlike mining-turnover, this is a hard rule which determines whether a blockchain is valid or not. If anyone-can-mine=true then mining-diversity is not applied.	0.3
+admin-consensus-upgrade	Proportion of permitted administrators who must agree to upgrade a blockchain’s protocol, between 0 (no consensus required) and 1 (every admin must agree).	0.5
+admin-consensus-txfilter	Proportion of permitted administrators who must agree to activate or deactivate a transaction filter, between 0 and 1. This also sets the threshold for approving library updates.	0.5
+admin-consensus-admin	Proportion of permitted administrators who must agree to modify the admin privileges for an address, between 0 and 1.	0.5
+admin-consensus-activate	Proportion of permitted administrators who must agree to modify the activate privileges for an address, between 0 and 1.	0.5
+admin-consensus-mine	Proportion of permitted administrators who must agree to modify mine privileges for an address, between 0 and 1.	0.5
+admin-consensus-create	Proportion of permitted administrators who must agree to modify stream creation privileges for an address, between 0 and 1.	0.0
+admin-consensus-issue	Proportion of permitted administrators who must agree to modify asset issuing privileges for an address, between 0 and 1.	0.0
+Defaults for consensus-related runtime parameters
+Parameter	Description	Default
+lock-admin-mine-rounds	Ignore forks that reverse changes in admin or mine permissions after this many (integer) rounds have passed. A round is defined as mining-diversity multiplied by the number of addresses with mine permissions, rounded up. This prevents changes in the blockchain’s governance model from being reversed and can be overridden by each node using the lockadminminerounds runtime parameter.	10
+mining-requires-peers	A node will only mine if it is connected to at least one other node. This is ignored during the setup phase or if only one address has mine permissions, and can be overridden by each node using the miningrequirespeers runtime parameter.	true
+mine-empty-rounds	If there are no new transactions, stop adding blocks after this many rounds. A round is defined as mining-diversity multiplied by the number of addresses with mine permissions, rounded up. This reduces disk usage in blockchains with periods of low activity. If negative, continue creating blocks indefinitely. This is ignored during the setup phase or if target-adjust-freq>0, and can be overridden by each node using the mineemptyrounds runtime parameter.	10
+mining-turnover	A value of 0.0 prefers a pure round robin scheme between an automatically-discovered subset of the addresses with mine permissions, with others stepping in only if one fails. A value of 1.0 prefers pure random block creation between these addresses. Intermediate values set the balance between these two behaviors. Lower values reduce the number of forks, making the blockchain more efficient, but increase the level of validator concentration. Unlike mining-diversity, this is a recommendation rather than a consensus rule, and can be overridden by each node using the miningturnover runtime parameter.	0.5
+Native blockchain currency
+When creating a blockchain, a fundamental question is whether it should use a native currency (the equivalent of bitcoin as an asset). By default, MultiChain blockchains do not use a native currency. However you may wish to change this to create a market for transactions, whereby transactions bid for inclusion in a block by attaching transaction fees in the native currency, and block creators are rewarded with these fees along with block rewards.
+
+Parameter	Description	Default
+initial-block-reward	Initial number of native currency units to award the creator of each block, in raw integer units.	0
+first-block-reward	Use a different reward for the first block only, in raw integer units. Ignored if negative.	-1
+reward-halving-interval	Each time this many blocks has passed, halve the per-block reward.	52560000
+reward-spendable-delay	After a block reward is granted, the number of blocks until that reward can be spent.	1
+minimum-per-output	Minimum quantity of native currency in every transaction output, in raw integer units. Note that this is a “standard transaction” rule and only applied if only-accept-std-txes=true (see below).	0
+maximum-per-output	Maximum quantity of native currency in every transaction output, in raw integer units.	100000000000000
+minimum-offchain-fee	Minimum transaction fee required to publish off-chain items, in raw integer units of the native currency per 1000 bytes of off-chain data.	0
+minimum-relay-fee	Minimum native currency fee required in order to relay a transaction, in raw integer units per 1000 bytes of raw transaction. This can be overridden by the minrelaytxfee runtime parameter and is only applied if only-accept-std-txes=true (see below).	0
+native-currency-multiple	How many raw integer units per display unit of the native currency, as used in the JSON-RPC API. For example in the bitcoin network this would be the number of satoshis per bitcoin.	100000000
+Advanced mining parameters
+Parameter	Description	Default
+skip-pow-check	Skip checking whether block hashes demonstrate sufficient proof-of-work.	false
+pow-minimum-bits	Minimum/initial proof-of-work difficulty, i.e. the number of leading zero bits in the block hash.	8
+target-adjust-freq	Frequency of recalculating proof-of-work difficulty level, measured in seconds. For blockchains which don’t require proof-of-work, use a negative value to prevent recalculation.	-1
+allow-min-difficulty-blocks	Ignore the current target difficulty level if blocks are taking too long to appear.	false
+Transaction limits
+Parameter	Description	Default
+only-accept-std-txs	Only accept and relay transactions which qualify as ‘standard’, according to the criteria below. If a block creator chooses to ignore these rules and include non-standard transactions in a block, the block will be accepted by other nodes even if this is true.	true
+max-std-tx-size	Upgradable. Maximum size of a standard transaction in bytes.	4194304 (4MB)
+max-std-op-returns-count	Upgradable. Maximum number of OP_RETURN outputs (for general data) in standard transactions.	32
+max-std-op-return-size	Upgradable. Maximum size of an OP_RETURN metadata output in a standard transaction, in bytes.	2097152 (2MB)
+max-std-op-drops-count	Upgradable. Maximum number of inline OP_DROP metadata elements in a single output in standard transactions. This is not applied to outputs that contain an OP_RETURN.	5
+max-std-element-size	Upgradable. Maximum size of non-OP_RETURN data elements in standard transactions, in bytes.	40000 (40 KB)
+Advanced parameters
+Parameter	Description	Example
+default-network-port	Default IP port to use for peer-to-peer communications between nodes (can be overridden by each node using the port runtime parameter).	8571
+default-rpc-port	Default IP port to use for JSON-RPC calls to multichaind (can be overridden by each node using the rpcport runtime parameter).	8570
+chain-name	Blockchain name, which is generally set by a call to multichain-util.	chain1
+protocol-version	Upgradable. The version of the chain-protocol protocol used. This can be used to provide backwards compatibility with older versions of MultiChain or updated to activate new features.	20010
+network-message-start	The four-byte “magic value” sent at the start of each peer-to-peer protocol message.	fddcc6f1
+address-pubkeyhash-version
+address-scripthash-version
+private-key-version
+address-checksum-value	These control the formatting of regular addresses, pay-to-scripthash (multisig) addresses and exported private keys. For more information, see address and key format.	
+Production recommendations
+Below is a list of parameters whose values are crucial for long-term production deployments of MultiChain. Many of these parameters can be upgraded by administrator consensus in a running blockchain.
+
+target-block-time	Consider where your validator nodes will be deployed geographically and the latency between those locations. Ensure this value is long enough to enable consensus to be maintained between those nodes at your peak expected throughput. Use pre-production testing to determine a safe value and then add a 50-100% margin of error. This parameter should be tested together with maximum-block-size since larger blocks take longer to propagate.
+maximum-block-size	Ensure this is large enough for expected future growth. Use pre-production testing to determine the block sizes for a given workload. Note also that for any given transaction throughput, an increase in target-block-time requires a corresponding proportional increase in maximum-block-size.
+anyone-can-mine	Set to false unless you are certain you want to use proof-of-work mining, in which case ensure that target-adjust-freq is a positive number and be aware that mining-diversity cannot be applied.
+anyone-can-admin	Set to false unless you are certain you want any user connected to the blockchain to be able to perform administrative actions, which is a highly unusual case.
+support-miner-precheck	Set to true if your blockchain is open to the public, or any participant might be motivated to conduct a denial-of-service attack against the network. (These prechecks are performed by MultiChain 1.0 beta 2 or later.)
+mining-diversity	Ensure this is above 0.5 to prevent a long-running network split leading to two blockchain forks that can both continue growing in the long term. Note that if anyone-can-mine=true then mining-diversity cannot be applied.
+admin-consensus-admin
+admin-consensus-mine	To prevent any possibility of a future conflict between administrators leading to a fork, set these above 0.5. This means there will always be a single clear majority for any governance changes to the chain.
+target-adjust-freq	Set to -1 unless you want to use proof-of-work mining in your blockchain, otherwise block creation could become difficult and CPU intensive over time. There is no reason to use proof-of-work in a chain which has permissioned “miners” who are governed by mining diversity.
+max-std-op-return-size	Ensure this is large enough to accommodate the largest piece of data you will ever embed in the blockchain (but note the hard limit of 64 MB). The max-std-tx-size and maximum-block-size should both be at least a few hundred bytes larger than this value.
+protocol-version	Set to 10008 or later (assuming your chain-protocol is multichain) so that your blockchain will support upgrading to new protocols in future versions of MultiChain.
