@@ -1,0 +1,81 @@
+Assets in MultiChain
+MultiChain supports assets natively at the blockchain level. The identifiers and quantities of assets are encoded within each transaction output, alongside the quantity of the blockchain’s native currency (which may be zero if it is not being used). Every MultiChain node tracks and verifies the quantity of assets in transactions, just as it is does with the native currency. Specifically, it checks that the total quantities of all assets in a transaction’s outputs are exactly matched by the total in its inputs. MultiChain allows each transaction output can contain any number of different assets.
+
+In MultiChain, assets can be referred to in any of three ways:
+
+An optional asset name, chosen at the time of issuance. If used, the name must be unique on a blockchain, between both assets and streams. Asset names are stored as UTF-8 encoded strings up to 32 bytes in size and are case insensitive.
+An issuetxid, containing the txid of the transaction in which the asset was issued.
+An assetref which encodes the block number and byte offset of the issuance transaction, along with the first two bytes of its txid.
+Assets in transaction data
+For regular use of MultiChain, you can ignore the technical details below. They are only relevant if you want to work with the raw data within MultiChain transactions. Note that you can also use the raw transactions APIs to encode and decode this information.
+
+Asset new issue metadata
+A transaction represents an issuance of a new asset if: (a) one of its regular outputs contains a new issuance quantity, and/or (b) the transaction has a special output with new issuance metadata.
+
+New issuance quantity
+A new issuance quantity is represented by the following metadata at the end of a regular output script, followed by an OP_DROP (0x75):
+
+Field	Size	Description
+Identifier	4 bytes	spkg or 0x73 0x70 0x6b 0x67
+Raw quantity	8 bytes	Number of raw integer asset units created up to 263-1, as a 64-bit integer in small-endian order.
+If multiple outputs of a single transaction contain this type of metadata, a single asset will be created, and each output will receive the quantity of that asset specified within its metadata. The maximum total raw quantity of an asset issued is 263-1.
+
+New issuance metadata
+Information can be given about a new asset in an optional separate output as below, followed by an OP_DROP (0x75) and OP_RETURN (0x6a):
+
+Field	Size	Description
+Identifier	4 bytes	spkn or 0x73 0x70 0x6b 0x6e
+Type	1 byte	0x01 to indicate a new asset
+Repeat the below for each asset property
+Property key	Variable	If the first byte of this key is 0x00, it denotes a property with special meaning to MultiChain, and the second byte gives the property type (see table below). If the first byte of the property key is not 0x00, it contains the null-delimited name of a user-defined custom field, e.g. 0x75 0x72 0x6c 0x00 for url (no longer used in MultiChain 2.0).
+Length	1-9 bytes	Bitcoin-style variable-length integer indicating the length of the property value in bytes.
+Value	Variable	The property’s value as raw binary.
+Below is a list of special property keys used in the above structure (all are optional):
+
+Property key	Property value
+0x00 0x01	Asset name in UTF-8 encoding.
+0x00 0x02	Asset open/closed for reissuance, where a value of 0x00 means closed (default) and 0x01 means open.
+0x00 0x05	Custom fields as a JSON object, serialized in UBJSON format (used in protocol versions 200xx).
+0x00 0x06	Asset send and/or receive restricted, where 0x02 means send-restricted, 0x04 means receive-restricted, and 0x06 means both.
+0x00 0x41	Quantity multiple, which maps raw transaction asset units to display units, as an unsigned 32-bit integer in small-endian order.
+If new issuance metadata is not present, the asset is closed for reissuance, has a quantity multiple of 1 and no name, but can still be referred to in the APIs using its asset reference or issuance txid.
+
+Per-output asset metadata
+The presence of assets in an output (excluding the transaction which created those units) is represented by the following metadata at the end of its script, followed by an OP_DROP (0x75):
+
+Field	Size	Description
+Identifier	4 bytes	spkq or 0x73 0x70 0x6b 0x71
+Repeat the below for each asset
+Asset	16 bytes	First 16 bytes of asset’s first issuance txid in reverse order.
+Raw quantity	8 bytes	Number of raw integer asset units up to 263-1, as a 64-bit integer in small-endian order.
+Asset follow-on issuance metadata
+A transaction represents a follow-on issuance of an existing asset if (a) one of its regular outputs contains a follow-on issuance quantity, and/or (b) the transaction has a special output with follow-on issuance metadata. If multiple outputs of a single transaction indicate a follow-on issuance, they must all relate to the same asset, and a single follow-on issuance will take place. It is not possible to mix a new asset issuance with an asset reissuance in a single transaction. However it is possible to combine one new asset issuance or reissuance with regular transfers of pre-existing assets.
+
+Follow-on issuance quantity
+A follow-on issuance quantity is represented by the following metadata at the end of a regular output script, followed by an OP_DROP (0x75):
+
+Field	Size	Description
+Identifier	4 bytes	spko or 0x73 0x70 0x6b 0x6f
+Asset	16 bytes	First 16 bytes of asset’s first issuance txid in reverse order.
+Raw quantity	8 bytes	Number of raw integer asset units created up to 263-1, as a 64-bit integer in small-endian order.
+The maximum total raw quantity of an asset issued is 263-1.
+
+Follow-on issuance metadata
+Information can be given about a follow-on issuance in a separate output in the format below:
+
+asset-identifier OP_DROP issue-details OP_DROP OP_RETURN
+
+The asset-identifier has the following structure:
+
+Field	Size	Description
+Prefix	4 bytes	spke or 0x73 0x70 0x6b 0x65
+Asset	16 bytes	First 16 bytes of asset’s first issuance txid in reverse order.
+The issue-details has the following structure:
+
+Field	Size	Description
+Identifier	4 bytes	spku or 0x73 0x70 0x6b 0x75
+Type	1 byte	0x01 to indicate an asset
+Repeat the below for each asset property
+Property key	Variable	If the first byte of this key is 0x00, it denotes a property with special meaning to MultiChain, and the second byte gives the property type. For now the only special property key is 0x00 0x05, where the value contains the reissuance custom fields as a JSON object, serialized in UBJSON format. If the first byte of the property key is not 0x00, it contains the null-delimited name of a user-defined custom field, e.g. 0x75 0x72 0x6c 0x00 for url (no longer used in MultiChain 2.0).
+Length	1-9 bytes	Bitcoin-style variable-length integer indicating the length of the property value in bytes.
+Value	Variable	The property’s value as raw binary.
