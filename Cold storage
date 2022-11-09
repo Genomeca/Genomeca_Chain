@@ -1,0 +1,48 @@
+Keeping your private keys away from the network
+
+The MultiChain distribution comes with an additional executable called multichaind-cold, which can be used as a cold node and wallet for storing private keys away from the network and signing transactions offline. The functioning of multichaind-cold is similar to the regular multichaind command with the -offline runtime parameter, with two key differences:
+
+The ability to connect to peers was removed at compile time for multichaind-cold, so there is no risk of it accidentally being run with the wrong options and becoming a “hot” network-connected wallet.
+The default directory is .multichain-cold rather than .multichain (on Windows, MultiChainCold rather than MultiChain), to prevent accidental sharing of wallets between cold and hot nodes.
+Setting up a cold node
+Regular MultiChain nodes obtain the blockchain parameters automatically from another node when first connecting to the network. This is not possible in the cold node, so instead the process must be performed manually as follows:
+
+On the cold node’s server, create the directory ~/.multichain-cold (on Windows, %APPDATA%\MultiChainCold). Note that you can use another directory if you prefer, passing it as the -datadir parameter every time you run multichaind-cold or multichain-cli.
+Create a subdirectory inside the previously created directory, with the blockchain’s name (e.g. chain1).
+Copy the params.dat file from the blockchain directory on a hot node to this blockchain directory on the cold node’s server.
+Using the cold node
+The multichaind-cold executable runs as a daemon in exactly the same way as multichaind, but it only accepts incoming JSON-RPC API requests and does not accept incoming (or create outgoing) peer-to-peer connections. To run multichaind-cold on Linux:
+
+/path/to/multichaind-cold [chain-name] -daemon
+
+Access to the API works in the same way as for multichaind, using either multichain-cli or another JSON-RPC client. The API’s credentials are stored in multichain.conf in the cold node blockchain directory, with random values automatically generated when multichaind-cold is first run.
+
+To use the credentials from the default cold node blockchain directory (e.g. ~/.multichain-cold/[chain-name] instead of ~/.multichain/[chain-name] on Linux), run multichain-cli with the -cold option.
+
+Note that the majority of API commands are disabled, leaving only the minimal set required to manage a cold wallet and node. Use the help command to see the list of commands that are available, and stop to stop the daemon.
+
+The current version of multichaind-cold creates many other files and directories in the blockchain’s directory, but the majority of these will never be updated after initial setup and can be ignored. As with multichaind, the private keys themselves are held in the wallet.dat file.
+
+Creating a cold address and private key
+There are three options for generating an address and corresponding private key on a cold node:
+
+The simplest option is to store the private key within the wallet of multichaind-cold. To begin with, the cold wallet will contain a single automatically-generated address and private key. Use the getnewaddress command to generate any additional addresses and private keys as required. The private key for any address in the wallet can be retrieved using dumpprivkey. The list of addresses in the wallet can be obtained using getaddresses or listaddresses.
+The createkeypairs command can be used on the cold node to generate private keys and addresses without storing them in its wallet. In this case the private keys and addresses should be stored in some database or other system outside of MultiChain.
+Private keys can also be generated using an external random number generator or specialized library. These private keys can optionally be stored in the cold node’s wallet using importprivkey, or kept in an external system. In either case, the private key and its corresponding address must be formatted for use with the MultiChain API as described here.
+Once the private key has been generated, its corresponding address can be safely shared with a hot node to help prepare transactions for signing.
+
+Building and signing transactions
+Below are step-by-step instructions for building and signing a transaction for an address whose private key is stored on a cold server:
+
+If the address corresponding to the private key has not yet been imported into the hot node, this should be done now using the importaddress command. Of course, the private key itself should never be shared with a hot node.
+Use createrawsendfrom on the hot node to prepare a transaction for signing on behalf of the address. See external key management for some examples of simple asset and stream transactions, or the raw transactions page for more complex and rare cases.
+Use decoderawtransaction on the hot node to obtain the list of outputs spent in the raw unsigned transaction (usually only one). For each element in the vin array of the response, note the txid and vout values.
+For each txid,vout pair retrieved in the previous step, use gettxout on the hot node to obtain the hexadecimal script of the corresponding output. This is given in the hex subelement of the scriptPubKey element of the response.
+Move the raw unsigned transaction and list of txid,vout,scriptPubKey values obtained from the hot node to the cold node’s server in an appropriate manner, to suit your security requirements. For example, they could be stored in a text file on a cleanly formatted USB key.
+Use signrawtransaction on the cold node to sign the transaction, with the following parameters in order: (a) the raw unsigned transaction (hexadecimal text), (b) an array of objects representing the spent outputs, where each object contains the fields txid (hexadecimal text), vout (integer), scriptPubKey (hexadecimal text), (c) if using MultiChain 1.0.1, a single-element array containing the private key required for signing (use dumpprivkey). From MultiChain 1.0.2 this private key need not be passed as a parameter if it is held in the cold node’s wallet.
+
+Below is an example using multichain-cli on Linux:
+
+./multichain-cli -cold chain1 signrawtransaction 010000000137d6e74ad5213ef84684c8719cd47273ad64ab5c1c7aff9876c84714901c8d990000000000ffffffff0200000000000000003776a9146bc5ac43c6cfd5c7237528e63d1bd16587f5b9d788ac1c73706b71ad64ab5c1c7aff9876c84714901c8d9910270000000000007500000000000000003776a9143bd846ebff3876b49cbd0e9736352ecbc581affe88ac1c73706b71ad64ab5c1c7aff9876c84714901c8d99905f0100000000007500000000 '[{"txid":"998d1c901447c87698ff7a1c5cab64ad7372d49c71c88446f83e21d54ae7d637","vout":0,"scriptPubKey":"76a9143bd846ebff3876b49cbd0e9736352ecbc581affe88ac0c73706b67a08601000000000075"}]' '["V9hpPzPBZXPFYYEG17xsUFunZpyXuvVZTn5qC4Eh5JmfwukeqyrpJe3K"]'
+The response should contain the fully signed transaction in the hex field. In versions prior to MultiChain 1.0.2, ignore the complete field.
+Move the fully signed transaction from the cold server back to the hot node, and transmit it using sendrawtransaction.
