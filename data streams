@@ -1,0 +1,88 @@
+MultiChain streams enable a blockchain to be used as a general purpose append-only database, with the blockchain providing timestamping, notarization and immutability. A MultiChain blockchain can contain any number of streams, where the data published in every stream is stored in full or referenced by a hash inside transactions. If a node chooses to subscribe to a stream, it will index that stream’s contents in real-time to enable efficient retrieval in various ways.
+
+Each stream is an ordered list of items, with the following characteristics:
+
+One or more publishers who have digitally signed that item.
+One or more keys between 0 and 256 bytes in length, to allow efficient retrieval. (In MultiChain 1.0, only one key is allowed per item.)
+Some data in JSON, text or binary format, which can be on-chain (embedded in the transaction) or off-chain (represented by a hash in the transaction). (In MultiChain 1.0, only on-chain binary data is supported).
+Information about the item’s transaction and block, including its txid, blockhash, blocktime, and so on.
+Stream filters can also be coded to define custom validation rules for items in the stream (not in MultiChain 1.0).
+
+Like native assets, MultiChain streams can be referred to in any of three ways:
+
+An optional stream name, chosen at the time of stream creation. If used, the name must be unique on a blockchain, between both assets and streams. Stream names are stored as UTF-8 encoded strings up to 32 bytes in size and are case insensitive.
+A createtxid, containing the txid of the transaction in which the stream was created.
+A streamref which encodes the block number and byte offset of the stream creation transaction, along with the first two bytes of its txid.
+If root-stream-name in the blockchain parameters is a non-empty string, it defines a stream which is created with the blockchain and can be written to immediately. The root stream’s createtxid is the txid of the coinbase of the genesis block, and its streamref is 0-0-0.
+
+For more background on streams, please see the blog posts on introducing streams, MultiChain 2.0 enhancements and off-chain data.
+
+Permissions in streams
+Streams are created by a special transaction output, which must only be signed by addresses which have the create permission (unless anyone-can-create is true in the blockchain parameters). This is easy to do using the create command in multichain-cli or the JSON-RPC API. The stream’s creator automatically receives admin, activate and write permissions for that stream. It is not possible to create more than one stream in a single transaction, or to combine stream creation with initial or follow-on asset issuance.
+
+Stream do not yet have effective read permissions. (Even if these were implemented at the level of MultiChain’s API, the stream data could still be read directly from the network or each node’s disk drive.) For now, read permissions in a stream can be managed through application-level encryption of each item’s data, with decryption keys distributed as appropriate – see this tutorial. Look out for more functionality in this area soon.
+
+Each stream item is encoded in a single transaction output (see below), which is easy to create using the publish command. A single transaction can write to multiple streams atomically using the publishmulti command in MultiChain 2.0, or raw transactions in MultiChain 1.0 or 2.0. The publishers of a stream item are defined by the addresses used in the inputs which signed the output containing that item. If an input spends a pay-to-scripthash (P2SH) multisig output, the P2SH address is considered as the item publisher, independent of the actual public keys used in the input.
+
+When a stream is created, it is either open or closed. Any address can publish items into an open stream, subject to the usual restriction that the address used in each input of a transaction must have global send permissions. In closed streams, every publisher of a stream item must have write permission for that stream, or the item and its transaction are not valid. The write permission for an address can be modified in a permissions transaction signed by an address with per-stream admin or activate permissions, while admin or activate permissions can be changed by those with per-stream admin permissions only.
+
+For the root stream, the creator of the chain’s first genesis block automatically receives admin, activate and write permissions. The root stream is open for general writing if the root-stream-open blockchain parameter is true.
+
+Streams in transaction data
+For regular use of MultiChain, you can ignore the technical details below. They are only relevant if you want to work with the raw data within MultiChain transactions. Note that you can also use the raw transactions APIs to encode and decode this information.
+
+Stream creation outputs
+A transaction output creates a stream if it contains the following, followed by an OP_DROP (0x75) and OP_RETURN (0x6a):
+
+Field	Size	Description
+Identifier	4 bytes	spkn or 0x73 0x70 0x6b 0x6e
+Type	1 byte	0x02 for a stream.
+Repeat the below for each stream property
+Property key	Variable	If the first byte of the key is 0x00, it denotes a property with special meaning to MultiChain, and the second byte gives the property type (see table below). If the first byte of the property key is not 0x00, it contains the null-delimited name of a user-defined custom field, e.g. 0x75 0x72 0x6c 0x00 for url (no longer used in MultiChain 2.0).
+Length	1-9 bytes	Bitcoin-style variable-length integer indicating the length of the property value in bytes.
+Value	Variable	The property’s value as raw binary.
+Below is a list of special property keys used in the above structure (all are optional):
+
+Property key	Property value
+0x00 0x01	Stream name in UTF-8 encoding.
+0x00 0x04	Stream open/closed to all writers, where a value of 0x00 means closed and 0x01 means open (used in protocol versions 100xx).
+0x00 0x05	All custom fields as a JSON object, serialized in UBJSON format (used in protocol versions 200xx).
+0x00 0x06	Stream read/write restrictions as a 1-byte bitmap, where 0x80 means read-restricted and 0x08 means write-restricted (used in protocol versions 200xx). If a stream is read-restricted, it is recommended to also specify that on-chain data is not allowed and that off-chain items must be salted (see below). This ensures that no data can be embedded directly within transactions (which all nodes see) and prevents dictionary attacks against chunk hashes.
+0x00 0x07	Item data restrictions as a 1-byte bitmap, where 0x01 means on-chain data is not allowed, 0x02 means off-chain is not allowed, and 0x04 means that all off-chain items must be salted (used in protocol versions 200xx).
+Stream item outputs
+A transaction output containing an on-chain stream item has the following structure:
+
+stream-identifier OP_DROP [item-key OP_DROP, ...] (item-format OP_DROP) OP_RETURN item-data
+
+A transaction output containing an off-chain stream item has the following structure:
+
+stream-identifier OP_DROP [item-key OP_DROP, ...] offchain-descriptor OP_DROP OP_RETURN
+
+In either case, the stream-identifier has the following structure:
+
+Field	Size	Description
+Prefix	4 bytes	spke or 0x73 0x70 0x6b 0x65
+Stream	16 bytes	First 16 bytes of stream creation txid in reverse order.
+And each item-key has the following structure:
+
+Field	Size	Description
+Prefix	4 bytes	spkk or 0x73 0x70 0x6b 0x6b
+Key data	Variable	Item key in UTF-8 encoding (can be empty).
+For on-chain items, the optional item-format has the following structure: (otherwise the data is assumed to be raw binary)
+
+Field	Size	Description
+Prefix	4 bytes	spkf or 0x73 0x70 0x6b 0x66
+Format	1 byte	0x01 to denote text data, or 0x02 to denote JSON data.
+For on-chain items, the item-data has no prefix and is embedded directly after the OP_RETURN. If the data format is text, it uses UTF-8 encoding. If the data format is JSON, it is serialized in the UBJSON format.
+
+For off-chain items, the offchain-descriptor has the following structure:
+
+Field	Size	Description
+Prefix	4 bytes	spkf or 0x73 0x70 0x6b 0x66
+Format	1 byte	0xf0 to denote off-chain data.
+Data format	1 byte	0x00 for binary data, 0x01 for text data, or 0x02 for JSON data.
+Salt length	1 byte	Either 0x00 (unsalted) or a number of bytes between 0x08 and 0x20.
+Chunk count	Variable	Bitcoin-style variable-length integer indicating the number of chunks.
+Repeat the below for each chunk of data
+Chunk size	Variable	Bitcoin-style variable-length integer indicating the size of the chunk.
+Chunk hash	32 bytes	Double SHA-256 hash of chunk contents, with bytes in reverse order.
