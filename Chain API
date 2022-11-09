@@ -1,0 +1,522 @@
+Accessing the API
+To access MultiChain’s API, use the included multichain-cli command-line tool or any other JSON-RPC client with basic access authentication. (MultiChain is compatible with any API library developed for Bitcoin Core.)
+
+The API credentials for each blockchain are stored in the ~/.multichain/[chain-name]/multichain.conf file and read by multichain-cli. These credentials are randomly generated the first time that multichaind is called for that chain. (Note that you can change this ~/.multichain/ path using the -datadir= option, and %APPDATA%\MultiChain\ is the equivalent on Windows.)
+
+You can use multichain-cli to send a single API command in the following form:
+
+multichain-cli [chain-name] [command] [parameters...]
+
+Alternatively, on Linux you can use multichain-cli in interactive mode, to send multiple commands in a single session:
+
+multichain-cli [chain-name]
+
+Each command is then entered in the [command] [parameters...] form. To end the session, type bye, exit, quit or Control-D.
+
+List of API commands by category – view alphabetically
+All optional parameters below are denoted in (round brackets) with non-empty default values indicated after the = symbol. Any commands, parameters and functionality which require MultiChain Enterprise are highlighted like this. See also the list of error codes and messages.
+
+General utilities
+Command	Parameters	Description
+getblockchainparams	(display-names=true)
+(with-upgrades=true)	Returns a list of values of this blockchain’s parameters. Use display-names to set whether parameters are shown with display names (with hyphens) or canonical names (without hyphens). Use with-upgrades to set whether to show the chain’s latest parameters (after any upgrades) or its original parameters (in the genesis block). Note that as of MultiChain 1.0.1, only the protocol version can be upgraded.
+gethealthcheck		Available in MultiChain Enterprise only. Retrieves a health check for the node. This command can be sent on the regular JSON-RPC API port or on a separate health checking port that will respond even if all main API threads are busy – see healthcheckport runtime parameter.
+getruntimeparams		Returns a selection of this node’s runtime parameters, which are set when the node starts up. Some parameters can be modified while MultiChain is running using setruntimeparam.
+setruntimeparam	param value	Sets the runtime parameter param to value and immediately applies the change. Currently supported parameters: acceptfiltertimeout autosubscribe bantx handshakelocal hideknownopdrops lockadminminerounds lockblock lockinlinemetadata maxshowndata maxqueryscanitems mineemptyrounds miningrequirespeers miningturnover sendfiltertimeout. Use the storeruntimeparams runtime parameter to persistently store these changes for future launches of MultiChain.
+getinfo		Returns general information about this node and blockchain. MultiChain adds some fields to Bitcoin Core’s response, giving the blockchain’s chainname, description, protocol, peer-to-peer port. There are also incomingpaused and miningpaused fields – see the pause command. The burnaddress is an address with no known private key, to which assets can be sent to make them provably unspendable. The nodeaddress can be passed to other nodes for connecting. The setupblocks field gives the length in blocks of the setup phase in which some consensus constraints are not applied.
+getinitstatus		Returns information about the node’s initialization status, during its initial connection to a new blockchain. This is relevant if the retryinittime runtime parameter is used.
+help		Returns a list of available API commands, including MultiChain-specific commands.
+stop		Shuts down the this blockchain node, i.e. stops the multichaind process.
+Managing wallet addresses
+addmultisigaddress	nrequired ["key", ...]	Creates a pay-to-scripthash (P2SH) multisig address and adds it to the wallet. Funds sent to this address can only be spent by transactions signed by nrequired of the specified keys. Each key can be a full public key, or an address if the corresponding key is in the node’s wallet. (Public keys for a wallet’s addresses can be obtained using the getaddresses call with verbose=true.) Returns the P2SH address.
+getaddresses	(verbose=false)	Returns a list of addresses in this node’s wallet. Set verbose to true to get more information about each address, formatted like the output of the validateaddress command. For more control see the new listaddresses command.
+getnewaddress		Returns a new address whose private key is added to the wallet.
+importaddress	address(es) (label)
+(rescan=true)	Adds address (or an array of addresses) to the wallet, without an associated private key. This creates one or more watch-only addresses, whose activity and balance can be retrieved via various APIs (e.g. with the includeWatchOnly parameter), but whose funds cannot be spent by this node. The rescan parameter controls whether and how the blockchain is rescanned for transactions relating to all wallet addresses, including these new ones. Pass true to rescan the entire chain, false to skip rescanning, and from version 1.0.5, a positive integer to rescan from that block number or a negative integer to rescan that many recent blocks. Returns null if successful.
+listaddresses	(addresses=*) (verbose=false)
+(count=MAX) (start=-count)	Returns information about the addresses in the wallet. Provide one or more addresses (comma-delimited or as an array) to retrieve information about specific addresses only, or use * for all addresses in the wallet. Use count and start to retrieve part of the list only, with negative start values (like the default) indicating the most recently created addresses.
+Working with non-wallet addresses
+createkeypairs	(count=1)	Generates one or more public/private key pairs, which are not stored in the wallet or drawn from the node’s key pool, ready for external key management. For each key pair, the address, pubkey (as embedded in transaction inputs) and privkey (used for signatures) is provided.
+createmultisig	nrequired
+["key", ...]	Creates a pay-to-scripthash (P2SH) multisig address. Funds sent to this address can only be spent by transactions signed by nrequired of the specified keys. Each key can be a full hexadecimal public key, or an address if the corresponding key is in the node’s wallet. Returns an object containing the P2SH address and corresponding redeem script.
+validateaddress	address|
+privkey|pubkey	Returns information about address, or the address corresponding to the specified privkey private key or pubkey public key, including whether this node has the address’s private key in its wallet.
+Permissions management – more info and tutorial
+grant	addresses permissions
+(native-amount=0)
+(start-block) (end-block)
+(comment) (comment-to)	Grants permissions to addresses, a comma-separated list of addresses. For global permissions, set permissions to one of connect, send, receive, create, issue, mine, activate, admin, or a comma-separated list thereof. Use mine with caution – if too many addresses with mine permissions become inactive, your chain could become stuck (see mining-diversity blockchain parameter). For per-asset, per-stream, per-variable and per-library permissions, use the form entity.permission or entity.permission,permission,... where entity is the entity name, ref or creation txid and each permission is a relevant permission for that entity type. Relevant permissions are issue,send,receive,activate,admin for assets, write,read,activate,admin for streams and write,activate,admin for variables and libraries. (Each grant command can only assign global permissions, or permissions for a single entity.) If the chain uses a native currency, you can send some to each recipient using the native-amount parameter. Returns the txid of the grant transaction sent. For more information, see permissions management.
+grantfrom	from-address to-addresses
+permissions (native-amount=0)
+(start-block) (end-block)
+(comment) (comment-to)	This works like grant, but with control over the from-address used to grant the permissions. It is useful if the node has multiple addresses with the required permissions.
+grantwithdata	addresses permissions
+metadata (native-amount=0)
+(start-block) (end-block)	This works like grant, but adds an additional transaction output containing metadata specified in one of these forms.
+grantwithdatafrom	from-address to-addresses
+permissions metadata
+(native-amount=0)
+(start-block) (end-block)	This works like grantwithdata, but with control over the from-address used to grant the permissions.
+listpermissions	(permissions=*)
+(addresses=*)
+(verbose=false)	Returns a list of all permissions which have been explicitly granted to addresses. The permissions parameter works the same as for grant, with the added option of using * or all to list all global permissions and entity.* or entity.all to list all per-entity permissions. Provide a comma-delimited list in addresses to list the permissions for particular addresses or * for all addresses. If verbose is true, the admins output field lists the administrator/s who assigned the corresponding permission, and the pending field lists permission changes which are waiting to reach consensus.
+revoke	addresses permissions
+(native-amount=0)
+(comment) (comment-to)	Revokes permissions from addresses, a comma-separated list of addresses. The permissions parameter works the same as for grant. This is equivalent to calling grant with start-block=0 and end-block=0. Returns the txid of transaction revoking the permissions. For more information, see permissions management.
+revokefrom	from-address to-addresses
+permissions (native-amount=0)
+(comment) (comment-to)	This works like revoke, but with control over the from-address used to revoke the permissions. It is useful if the node has multiple addresses with administrator permissions.
+verifypermission	address
+permission	Checks whether the specified address has the specified permission, returning true or false as appropriate. Global permissions such as connect as well as per-entity permissions such as stream1.write can be checked. Unlike listpermissions, this includes implicit permissions, e.g. even if an address has admin permissions only, this will return true for send permissions. This can also be used as a Smart Filter callback and provides less information than listpermissions.
+Asset management – more info and tutorial
+getassetinfo	asset
+(verbose=false)	Returns information about a single asset issued on the blockchain, where asset is the asset name, ref or issuance txid. In assets with multiple issuance events, the top-level issuetxid and details fields refer to the first issuance only – set verbose to true for details about each of the individual issuances. This command can also be used as a Smart Filter callback and so excludes the node-specific information provided by listassets.
+gettokeninfo	asset token
+(verbose=false)	Returns information about a single token issued on the blockchain, where asset is the parent asset name, ref or issuance txid. Requires MultiChain 2.2.1 or later.
+issue	address name|params
+qty (units=1)
+(native-amount=min-per-output)
+(custom-fields)	Creates a new asset on the blockchain, sending the initial qty units to address. To create an asset with the default behavior, pass an asset name only for name|params. For more control, pass an object with the following fields: (all are optional)
+"name":"..." sets the asset’s name.
+"open":true allows additional units to be issued in future, using issuemore for fungible assets or issuetoken for non-fungible.
+"restrict":"send,receive" enables per-asset send and receive permissions. Substitute "send" or "receive" on its own to enable only one.
+"unrestrict":"issue" disabled per-asset issue permission, allowing anyone to issue additional units for this asset.
+"fungible":false makes issuances of the asset non-fungible (for NFTs). If this is set, qty must be 0, units must be 1, and either open or canopen must be true.
+"canclose":true and/or "canopen":true allow the asset to be closed and/or (re)opened for future issuance using the update command.
+"totallimit":... sets the maximum total number of units which can be issued.
+"issuelimit":... sets the maximum number of units per issuance.
+The smallest transactable unit is given by units, e.g. 0.01. If the chain uses a native currency, you can send some with the new asset using the native-amount parameter. Pass a JSON object in custom-fields to provide extra information about the asset. Returns the txid of the issuance transaction. For more information, see native assets.
+
+issuefrom	from-address to-address
+name|params qty (units=1)
+(native-amount=min-per-output)
+(custom-fields)	This works like issue, but with control over the from-address used to issue the asset. It is useful if the node has multiple addresses with issue permissions.
+issuemore	address asset qty
+(native-amount=min-per-output)
+(custom-fields)	Issues qty additional units of a fungible asset, sending them to address. This is only possible if the asset is open, and by addresses with per-asset issue permissions (initially, the original issuer) unless the asset was created with "unrestrict":"issue". The asset can be specified using its name, ref or issuance txid – see native assets for more information. If the chain uses a native currency, you can send some with the new asset units using the native-amount parameter. Pass a JSON object in the optional custom-fields parameter to provide extra information about the issuance event – this will not affect the original values (use getassetinfo or listassets with verbose=true to see both sets). Returns the txid of the issuance transaction.
+issuemorefrom	from-address to-address
+asset qty
+(native-amount=min-per-output)
+(custom-fields)	This works like issuemore, but with control over the from-address used. It is useful if the node has multiple addresses with per-asset issue permissions.
+issuetoken	address asset token qty
+(native-amount=min-per-output)
+(token-details)	Issues qty units of a new token named token for a non-fungible asset, sending the tokens to address. This is only possible if the asset is open, and by addresses with per-asset issue permissions (initially, the original issuer) unless the asset was created with "unrestrict":"issue". The asset can be specified using its name, ref or issuance txid – see native assets for more information. If the chain uses a native currency, you can send some with the new asset units using the native-amount parameter. Pass a JSON object in the optional token-details parameter to provide extra information about the token. Returns the txid of the issuance transaction.
+issuetokenfrom	from-address to-address
+asset token qty
+(native-amount=min-per-output)
+(token-details)	This works like issuetoken, but with control over the from-address used. It is useful if the node has multiple addresses with per-asset issue permissions.
+listassetissues	asset (verbose=false)
+(count=MAX) (start=-count)	Returns information about issuances of asset, passed as an asset name, ref or issuance txid. Set verbose to true to include the issuers and custom fields or token details for each issuance. Use count and start to retrieve part of the list only, with negative start values (like the default) indicating the most recent issuances.
+listassets	(assets=*) (verbose=false)
+(count=MAX) (start=-count)	Returns information about assets issued on the blockchain. Pass an asset name, ref or issuance txid in assets to retrieve information about one asset only, an array thereof for multiple assets, or * for all assets. In assets with multiple issuance events, the top-level issuetxid and details fields refer to the first issuance only – set verbose to true for details about each of the individual issuances. Use count and start to retrieve part of the list only, with negative start values (like the default) indicating the most recently created assets. Extra fields are shown for assets to which this node is subscribed.
+update	asset params	Updates the open/closed status of asset, passed as an asset name, ref or issuance txid. Pass {"open":true} or {"open":false} in params as appropriate. This is only possible if canopen or canclose were specified on asset creation, respectively, and by addresses with per-asset admin permissions (initially, the original issuer). Returns the txid of the update transaction.
+updatefrom	from-address asset params	This works like update, but with control over the from-address used to update the asset. It is useful if the node has multiple addresses with per-asset admin permissions.
+Querying wallet balances and transactions
+getaddressbalances	address (minconf=1)
+(includeLocked=false)	Returns a list of all the asset balances for address in this node’s wallet, with at least minconf confirmations. Use includeLocked to include unspent outputs which have been locked, e.g. by a call to preparelockunspent. This does not show separate balances for tokens of non-fungible assets – see gettokenbalances.
+getaddresstransaction	address txid
+(verbose=false)	Provides information about transaction txid related to address in this node’s wallet, including how it affected that address’s balance. Use verbose to provide details of transaction inputs and outputs.
+getmultibalances	(addresses=*)
+(assets=*)
+(minconf=1)
+(includeWatchOnly=false)
+(includeLocked=false)	Returns a list of balances of the addresses in this node’s wallet for the specified assets, with at least minconf confirmations. The addresses are specified as a comma-delimited list or array, or * for all addresses with non-zero balances. The assets are specified as an array of asset names, refs or issuance txids, or * for all assets with non-zero balances. Use includeWatchOnly to include watch-only addresses (only relevant if addresses=*) and includeLocked to include unspent outputs which have been locked, e.g. by a call to preparelockunspent. The response includes a total of the balances shown. This does not show separate balances for tokens of non-fungible assets – see gettokenbalances.
+gettokenbalances	(addresses=*)
+(assets=*)
+(minconf=1)
+(includeWatchOnly=false)
+(includeLocked=false)	This works like getmultibalances but only shows balances for tokens of non-fungible assets, separated by token.
+gettotalbalances	(minconf=1)
+(includeWatchOnly=false)
+(includeLocked=false)	Returns a list of all the asset balances in this node’s wallet, with at least minconf confirmations. Use includeWatchOnly to include the balance of watch-only addresses and includeLocked to include unspent outputs which have been locked, e.g. by a call to preparelockunspent. This does not show separate balances for tokens of non-fungible assets – see gettokenbalances.
+getwallettransaction	txid
+(includeWatchOnly=false)
+(verbose=false)	Provides information about transaction txid in this node’s wallet, including how it affected the node’s total balance. Use includeWatchOnly to consider watch-only addresses as if they belong to this wallet and verbose to provide details of transaction inputs and outputs.
+listaddresstransactions	address
+(count=10) (skip=0)
+(verbose=false)	Lists information about the count most recent transactions related to address in this node’s wallet, including how they affected that address’s balance. Use skip to go back further in history and verbose to provide details of transaction inputs and outputs.
+listwallettransactions	(count=10) (skip=0)
+(includeWatchOnly=false)
+(verbose=false)	Lists information about the count most recent transactions in this node’s wallet, including how they affected the node’s total balance. Use skip to go back further in history and includeWatchOnly to consider watch-only addresses as if they belong to this wallet. Use verbose to provide the details of transaction inputs and outputs. Note that unlike Bitcoin Core’s listtransactions command, the response contains one element per transaction, rather than one per transaction output.
+Sending one-way payments
+send	address amounts
+(comment)
+(comment-to)	Sends a payment to address, returning the txid. The amounts field can specify a quantity of the native blockchain currency, some asset(s), token(s) and/or inline metadata, using one of these forms. See also sendasset for sending a single asset and sendfrom to control the address whose funds are used.
+sendasset	address asset qty
+(native-amount=min-per-output)
+(comment) (comment-to)	Sends qty of asset to address, returning the txid. The asset can be specified using its name, ref or issuance txid – see native assets for more information. See also sendassetfrom to control the address whose funds are used, send for sending multiple assets in one transaction, and sendfrom to combine both of these.
+sendassetfrom	from-address to-address
+asset qty
+(native-amount=min-per-output)
+(comment) (comment-to)	This works like sendasset, but with control over the from-address whose funds are used. Any change from the transaction is sent back to from-address. See also sendfrom for sending multiple assets in one transaction.
+sendfrom	from-address to-address amounts
+(comment) (comment-to)	This works like send, but with control over the from-address whose funds are used. Any change from the transaction is sent back to from-address.
+sendwithdata	address amounts metadata	This works like send, but with an additional transaction output containing metadata specified in one of these forms.
+sendwithdatafrom	from-address to-address
+amounts metadata	This works like sendwithdata, but with control over the from-address whose funds are used. Any change from the transaction is sent back to from-address.
+Atomic exchange transactions – tutorial
+appendrawexchange	tx-hex txid vout
+amounts	Adds to the raw atomic exchange transaction in tx-hex given by a previous call to createrawexchange or appendrawexchange. This adds an offer to exchange the native currency, asset(s) and/or token(s) in output vout of transaction txid for the native currency, asset(s) and/or token(s) in amounts, specified using one of these forms. The txid and vout should generally be taken from preparelockunspent or preparelockunspentfrom. Returns a raw transaction in the hex field alongside a complete field stating whether the exchange is complete (i.e. balanced) or not. If complete, the transaction can be broadcast to the network using sendrawtransaction. If not, it can be passed to a further counterparty, who can call decoderawexchange and appendrawexchange as appropriate.
+completerawexchange	tx-hex txid vout
+amounts
+(metadata)	This works like appendrawexchange but finalizes the exchange, preventing any further additions. (Technically, it adds a SIGHASH_ALL signature.) If the completed exchange is not balanced, an error is returned. Optional metadata can be added in an additional transaction output, signed by this user only, by specifying it in one of these forms. Returns a raw transaction in hexadecimal which can be broadcast to the network using sendrawtransaction.
+createrawexchange	txid vout
+amounts	Creates a new atomic exchange transaction which offers to exchange the native currency, asset(s) and/or token(s) in output vout of transaction txid for the native currency, asset(s) and/or token(s) in amounts, specified using one of these forms. The txid and vout should generally be taken from the response to preparelockunspent or preparelockunspentfrom. Returns a raw partial transaction in hexadecimal which can be passed to the counterparty, who can call decoderawexchange and appendrawexchange as appropriate.
+decoderawexchange	tx-hex
+(verbose=false)	Decodes the raw exchange transaction in tx-hex, given by a previous call to createrawexchange or appendrawexchange. Returns details on the offer represented by the exchange and its present state. The offer field in the response lists the quantity of native currency, asset(s) and/or token(s) which are being offered for exchange. The ask field lists the native currency, asset(s) and/or token(s) which are being asked for. The candisable field specifies whether this wallet can disable the exchange transaction by double-spending against one of its inputs. The cancomplete field specifies whether this wallet has the assets required to complete the exchange. The complete field specifies whether the exchange is already complete (i.e. balanced) and ready for sending. If verbose is true then all of the individual stages in the exchange are listed. Other fields relating to fees are only relevant for blockchains which use a native currency.
+disablerawtransaction	tx-hex	Sends a transaction to disable the offer of exchange in tx-hex, returning the txid. This is achieved by spending one of the exchange transaction’s inputs and sending it back to the wallet. To check whether this can be used on an exchange transaction, check the candisable field of the output of decoderawexchange.
+preparelockunspent	amounts
+(lock=true)	Prepares an unspent transaction output (useful for building atomic exchange transactions) containing the native currency, asset(s) and/or token(s) in amounts, specified using one of these forms. The output will be locked against automatic selection for spending unless the optional lock parameter is set to false. Returns the txid and vout of the prepared output.
+preparelockunspentfrom	from-address
+amounts
+(lock=true)	This works like preparelockunspent, but with control over the from-address whose funds are used to prepare the unspent transaction output. Any change from the transaction is send back to from-address.
+Stream management – more info
+create	type=stream name
+restrictions
+(custom-fields)	Creates a new stream on the blockchain called name. Pass the value "stream" in the type parameter (the create API can also be used to create upgrades and filters). Pass an object such as {"restrict":"offchain,onchain,write,read"} in restrictions to restrict some activites, where offchain disallows publishing off-chain items, onchain disallows publishing on-chain items, write restricts writing to addresses with per-stream write permissions, and read restricts reading to addresses with per-stream read permissions. (Writing and reading in streams with read permissions requires MultiChain Enterprise, but any node can create these streams and manage their permissions.) Include "salted":true in restrictions to include random salt in all offchain chunks, to protect against dictionary attacks and ensure each chunk hash is unique. Read-restricted streams automatically use salting and disallow on-chain items. Pass a JSON object in the optional custom-fields parameter to provide extra information about the stream. Returns the txid of the transaction creating the stream.
+createfrom	from-address
+type=stream
+name open|params
+(custom-fields)	This works like create, but with control over the from-address used to create the stream. It is useful if the node has multiple addresses with create permissions.
+getstreaminfo	stream
+(verbose=false)	Returns information about a single stream created on the blockchain, where stream is the stream name, ref or creation txid. Set verbose to true for the stream’s creator addresses. This command can also be used as a Smart Filter callback and so excludes the node-specific information provided by liststreams.
+liststreams	(streams=*)
+(verbose=false)
+(count=MAX)
+(start=-count)	Returns information about streams created on the blockchain. Pass a stream name, ref or creation txid in streams to retrieve information about one stream only, an array thereof for multiple streams, or * for all streams. Use count and start to retrieve part of the list only, with negative start values (like the default) indicating the most recently created streams. Extra fields are shown for streams to which this node has subscribed.
+Publishing stream items – more info
+publish	stream key(s)
+data (options)	Publishes an item in stream, passed as a stream name, ref or creation txid. Pass a single textual key or an array thereof in the key(s) parameter. The data parameter can accept raw hexadecimal data like a1b2c3d4, a reference to the binary cache {"cache":"Ev1HQV1aUCY"}, textual data {"text":"hello world"} or JSON data {"json":{"i":[1,2],"j":"yes"}}. Pass offchain in the options parameter to publish as an off-chain stream item. Returns the txid of the transaction sent. To easily publish multiple items in a single transaction, see the publishmulti(from) command.
+publishfrom	from-address stream
+key(s) data (options)	This works like publish, but publishes the item from from-address. It is useful if a stream is open or the node has multiple addresses with per-stream write permissions.
+publishmulti	stream
+items
+(options)	Publishes multiple stream items in a single transaction, up to the max-std-op-returns-count blockchain parameter. Set stream to the name, ref or creation txid of the default stream for publishing and options to offchain to publish off-chain items by default. Pass an array in items, each member of which takes the minimum form {"key":"k1","data":"0123"} or {"keys":["k1","k2"],"data":"0123"}. As with the regular publish API, each data field can also contain a {"cache":"..."} or {"text":"..."} or {"json":...} structure. Each element in items may also contain a "for":"stream1" and/or "options":"offchain" field to override the defaults. Returns the txid of the transaction publishing the items.
+publishmultifrom	from-address
+stream items
+(options)	This works like publishmulti, but publishes the items from from-address.
+Managing stream and asset subscriptions
+subscribe	asset(s)|stream(s)
+(rescan=true)
+(parameters)	Instructs the node to start tracking one or more asset(s) or stream(s). These are specified using a name, ref or creation/issuance txid, or for multiple items, an array thereof. If rescan is true, the node will reindex all items from when the assets and/or streams were created, as well as those in other subscribed entities. To improve performance in MultiChain Enterprise, pass a comma-delimited string such as "items,keys,retrieve" in parameters to control which indexes are built for streams and whether to retrieve all off-chain items. Other options are publishers,items-local,keys-local,publishers-local, where -local indexes are used for querying the stream with local ordering in APIs such as liststreamitems. Returns null if successful. See also the autosubscribe runtime parameter.
+trimsubscribe	stream(s)
+parameters	Available in MultiChain Enterprise only. Instructs the node to stop building certain indexes for one or more stream(s), specified using a name, ref or creation/issuance txid, or for multiple items, an array thereof. Pass a comma-delimited list in parameters containing one or more of retrieve,keys,publishers,items-local,keys-local,publishers-local whose meanings are the same as for subscribe. It is not possible to remove the items index.
+unsubscribe	asset(s)|stream(s)
+(purge=false)	Instructs the node to completely stop tracking one or more asset(s) or stream(s). Assets or streams are specified using a name, ref or creation/issuance txid, or for multiple items, an array thereof. If purge is true then any off-chain data retrieved for this stream will be purged from disk.
+Querying subscribed assets
+getassettransaction	asset txid
+(verbose=false)	Retrieves a specific transaction txid involving asset, passed as an asset name, ref or issuance txid, to which the node must be subscribed. Set verbose to true for additional information about the transaction.
+listassettransactions	asset (verbose=false)
+(count=10) (start=-count)
+(local-ordering=false)	Lists transactions involving asset, passed as an asset name, ref or issuance txid, to which the node must be subscribed. Set verbose to true for additional information about each transaction. Use count and start to retrieve part of the list only, with negative start values (like the default) indicating the most recent items. Set local-ordering to true to order transactions by when first seen by this node, rather than their order in the chain.
+Querying subscribed streams
+getstreamitem	stream txid
+(verbose=false)	Retrieves a specific item with txid from stream, passed as a stream name, ref or creation txid, to which the node must be subscribed. Set verbose to true for additional information about the item’s transaction. If an item’s data as stored in the transaction is larger than the maxshowndata runtime parameter, it will be returned as an object with parameters for gettxoutdata. If the transaction contains more than one item for the stream, this will return an error – use liststreamtxitems instead.
+getstreamkeysummary	stream
+key
+mode	
+Outputs a summary of all items in stream (passed as a stream name, ref or creation txid) with stream key. (Any items which are marked as invalid by a stream filter are not included in the summary.) The mode parameter is a comma-delimited list of keywords. For now, mode must contain jsonobjectmerge, which states that all JSON objects in the qualifying stream items should be merged into a single object. The merged object contains all the JSON keys from the individual objects, with the latest value for each. Optional keywords include:
+
+recursive merges JSON sub-objects recursively.
+noupdate returns the first value for each JSON key instead of the last.
+omitnull omits JSON keys with null values from the response.
+ignoreother ignores non-JSON object items instead of giving an error.
+ignoremissing ignores off-chain items with missing data instead of giving an error.
+firstpublishersany only includes items signed by a publisher of the key’s first item.
+firstpublishersall only includes items signed by all publishers of the key’s first item.
+This API enables a stream to be efficiently used as a general-purpose database, with each stream key representing a separate entity, and each stream item representing the creation or updating of that entity.
+
+getstreampublishersummary	stream
+address
+mode	This works like getstreamkeysummary, except it summarizes all stream items published by address independent of their key, and the firstpublishersany and firstpublishersall keywords are not allowed. This API enables a stream to be efficiently used as an identity database, where each participant independently maintains their own entry.
+gettxoutdata	txid vout
+(count-bytes=INT_MAX)
+(start-byte=0)	Returns the data embedded or referenced (for off-chain stream items) in output vout of transaction txid, in hexadecimal. This is particularly useful if a stream item’s data was not shown in full due to the maxshowndata runtime parameter. For binary data only, use the count-bytes and start-byte parameters to retrieve part of the data.
+liststreamblockitems	stream blocks
+(verbose=false)
+(count=MAX) (start=-count)	This works like liststreamitems, but listing items within the specified blocks only. One or more blocks can be specified using their heights, hashes or timestamps – see the listblocks command for more information.
+liststreamkeyitems	stream key (verbose=false)
+(count=10) (start=-count)
+(local-ordering=false)	This works like liststreamitems, but listing items with the given key only.
+liststreamkeys	stream (keys=*)
+(verbose=false)
+(count=MAX) (start=-count)
+(local-ordering=false)	Provides information about keys in stream, passed as a stream name, ref or creation txid. Pass a single key in keys to retrieve information about one key only, pass an array for multiple keys, or * for all keys. Set verbose to true to include information about the first and last item with each key shown. See liststreamitems for details of the count, start and local-ordering parameters.
+liststreamitems	stream (verbose=false)
+(count=10) (start=-count)
+(local-ordering=false)	Lists items in stream, passed as a stream name, ref or creation txid. Set verbose to true for additional information about each item’s transaction. Use count and start to retrieve part of the list only, with negative start values (like the default) indicating the most recent items. Set local-ordering to true to order items by when first seen by this node, rather than their order in the chain. If an item’s data as stored in the transaction is larger than the maxshowndata runtime parameter, it will be returned as an object with parameters for gettxoutdata.
+liststreampublisheritems	stream address
+(verbose=false)
+(count=10) (start=-count)
+(local-ordering=false)	This works like liststreamitems, but listing items published by the given address only.
+liststreampublishers	stream (addresses=*)
+(verbose=false)
+(count=MAX) (start=-count)
+(local-ordering=false)	Provides information about publishers who have written to stream, passed as a stream name, ref or creation txid. Pass a single address in addresses to retrieve information about one publisher only, pass an array or comma-delimited list for multiple publishers, or * for all publishers. Set verbose to true to include information about the first and last item by each publisher shown. See liststreamitems for details of the count, start and local-ordering parameters, relevant only if address=*.
+liststreamqueryitems	stream
+query
+(verbose=false)	This works like liststreamitems, but listing items in stream which match all of the specified keys and/or publishers in query. The query is an object with a key or keys field, and/or a publisher or publishers field. If present, key and publisher should specify a single key or publisher respectively, whereas keys and publishers should specify arrays thereof. Note that, unlike other stream retrieval APIs, liststreamqueryitems cannot rely completely on prior indexing, so the maxqueryscanitems runtime parameter limits how many items will be scanned after using the best index. If more than this is needed, an error will be returned.
+liststreamtxitems	stream
+txid
+(verbose=false)	This works like liststreamitems, but listing items in stream within the given txid only. It should be used as a replacement for getstreamitem if multiple items are being published to a single stream in a single transaction.
+Controlling off-chain data (MultiChain Enterprise only)
+purgepublisheditems	items	Available in MultiChain Enterprise only. Purges selected off-chain items published by this node from local storage. Use with caution – this can lead to permanent data loss if no other node has retrieved the items. The items parameter can accept all for all items, a comma-delimited list or array of transaction IDs, an array of {"txid":"id","vout":n} transaction outputs, or a {"blocks":blocks-set} set of blocks (where blocks-set takes any format accepted by listblocks). Returns statistics on how many chunks were purged and their total size. If this node is subscribed to the stream in which a purged item appears, the item will no longer be available. However this does not purge any item retrieved by this node from the network, unless that item is identical to a purged published item, and neither item is salted. To avoid these collisions, create streams with {"salted":true}. To explicitly purge retrieved items, use purgestreamitems.
+purgestreamitems	stream
+items	Available in MultiChain Enterprise only. Purges selected off-chain items retrieved from stream (specified by name, ref or creation txid) from local storage and prevents their future automatic retrieval. The items parameter can accept all for all items, a comma-delimited list or array of transaction IDs, an array of {"txid":"id","vout":n} transaction outputs, a {"blocks":blocks-set} set of blocks (where blocks-set takes any format accepted by listblocks) or any query such as {"key":"key1"} accepted by liststreamqueryitems. Returns statistics on how many items were matched and how many chunks were purged and their total size. This does not purge items published by this node – see purgepublisheditems. Note also that if another stream contains an identical item, and neither item is salted, then the purged item may still be available in this stream. To avoid these collisions, create streams with {"salted":true}.
+retrievestreamitems	stream
+items	Available in MultiChain Enterprise only. Queues selected off-chain items in stream (specified by name, ref or creation txid) for retrieval from the network, including items that were not automatically retrieved and items that were explicitly purged. The items parameter takes the same form as for purgestreamitems. Returns statistics on how many items and chunks were matched, and their total size.
+Managing wallet unspent outputs
+combineunspent	(addresses=*) (minconf=1)
+(maxcombines=100) (mininputs=2)
+(maxinputs=100) (maxtime=15)	Sends transactions to combine unspent outputs (UTXOs) belonging to the same address into a single unspent output, returning a list of txids. This can improve wallet performance, especially for block creators in a chain with short block times and non-zero rewards. Set addresses to a comma-separated list of addresses to combine outputs for, or * for all addresses in the wallet. Only combines outputs with at least minconf confirmations, using between mininputs and maxinputs per transaction. A single call to combineunspent can create up to maxcombines transactions over up to maxtime seconds. See also the autocombine runtime parameters.
+listlockunspent		Returns a list of locked unspent transaction outputs in the wallet. These will not be used when automatically selecting the outputs to spend in a new transaction.
+listunspent	(minconf=1) (maxconf=999999)
+(["address", ...])	Returns a list of unspent transaction outputs in the wallet, with between minconf and maxconf confirmations. For a MultiChain blockchain, each transaction output includes assets and permissions fields listing any assets or permission changes encoded within that output. If the third parameter is provided, only outputs which pay an address in this array will be included.
+lockunspent	unlock
+([{"txid":"id","vout":n},...])	If unlock is false, locks the specified transaction outputs in the wallet, so they will not be used for automatic coin selection. If unlock is true, it unlocks the specified outputs, or unlocks all outputs if no second parameter is provided.
+Working with raw transactions – tutorial
+appendrawchange	tx-hex address
+(native-fee)	Adds a change output to the raw transaction in tx-hex given by a previous call to createrawtransaction. Any assets or native currency in the transaction inputs which are not claimed in the outputs will be sent to address, minus the native-fee (which is calculated automatically if omitted). The returned raw transaction can be signed and broadcast to the network using signrawtransaction and sendrawtransaction.
+appendrawdata	tx-hex metadata|object	Adds a metadata output to the raw transaction in tx-hex given by a previous call to createrawtransaction. Regular metadata can be specified in one of these forms, or an object can be passed to represent asset issuance, stream creation or a stream item – see raw transactions for more details. The returned raw transaction can be signed and broadcast to the network using signrawtransaction and sendrawtransaction.
+appendrawtransaction	tx-hex
+[{"txid":"id","vout":n},...]
+({"address":amounts,...})
+(data=[]) (action="")
+(["private-key",...])
+(sighashtype=ALL)	This works like createrawtransaction but adds the given inputs and (regular or metadata) outputs to the raw transaction specified in tx-hex, rather than creating a new transaction. It is particularly useful for accepting an offer of exchange using an address whose private key is held outside the node’s wallet. Note that if tx-hex contains more outputs than inputs, the new outputs will be inserted at position n, where n is the number of inputs in tx-hex. (This is important to preserve the viability of certain types of transaction signatures.)
+createrawtransaction	[{"txid":"id","vout":n},...]
+{"address":amounts,...}
+(data=[]) (action="")
+(["private-key",...])
+(sighashtype=ALL)	Creates a transaction spending the specified inputs, sending to the given addresses with optional metadata. Each amounts field can specify a quantity of the native blockchain currency, some asset(s) and/or inline metadata, using one of these forms. (To allow multiple outputs with the same address, an array of objects can also be passed in the second parameter.) The optional data array adds one or more metadata outputs to the transaction, where each element is formatted as passed to appendrawdata. The optional action parameter can be lock (locks the given inputs in the wallet), sign (signs the transaction using wallet keys), lock,sign (does both) or send (signs and sends the transaction). If action is send the txid is returned. If action contains sign, an object with hex and complete fields is returned and the optional ["private-key",...] and sighashtype parameters can be used to control the signature (see signrawtransaction for more details). For other values of action, the raw transaction hexadecimal is returned. See raw transactions for more details on building raw transactions.
+createrawsendfrom	from-address
+{"to-address":amounts,...}
+(data=[]) (action="")
+(["private-key",...])
+(sighashtype=ALL)	This works like createrawtransaction, except it automatically selects the transaction inputs from those belonging to from-address, to cover the appropriate amounts. One or more change outputs going back to from-address will also be added to the end of the transaction.
+decoderawtransaction	tx-hex	Returns a JSON object describing the serialized transaction in tx-hex. For a MultiChain blockchain, each transaction output includes assets and permissions fields listing any assets or permission changes encoded within that output. There will also be a data field listing the content of any OP_RETURN outputs in the transaction.
+sendrawtransaction	tx-hex	Validates the raw transaction in tx-hex and transmits it to the network, returning the txid. The raw transaction can be created using createrawtransaction, (optionally) appendrawdata and signrawtransaction, or else createrawexchange and appendrawexchange.
+signrawtransaction	tx-hex
+([{parent-output},...])
+(["private-key",...])
+(sighashtype=ALL)	Signs the raw transaction in tx-hex, often provided by a previous call to createrawtransaction or createrawsendfrom. Returns a raw hexadecimal transaction in the hex field alongside a complete field stating whether it is now completely signed. If complete, the transaction can be broadcast to the network using sendrawtransaction. If not, it can be passed to other parties for additional signing. To create chains of unbroadcast transactions, pass an optional array of {parent-output} objects, each of which takes the form {"txid":"id","vout":n,"scriptPubKey":"hex"}. To sign using (only) specific private keys, which need not be in the node’s wallet, pass an array of "private-key" strings, formatted like the output of dumpprivkey. To sign using the wallet’s private keys, omit this parameter or pass null. To sign only part of the transaction, use sighashtype to control the signature hash type.
+Peer-to-peer connections
+addnode	ip(:port)
+command	Manually adds or removes a peer-to-peer connection (peers are also discovered and added automatically). The ip can be an IPv4 address, IPv4-as-IPv6 address or IPv6 address. For the entire ip:port you can also use the part after the @ symbol of the other node’s nodeaddress, as given by the getinfo command. The command parameter should be one of add (to manually queue the peer for the next available slot), remove (to remove the peer), or onetry (to immediately connect to the peer even if a slot is not available).
+getaddednodeinfo	verbose (ip(:port))	If verbose=true, returns information about a peer which was added using addnode, or all such peers if ip(:port) is omitted. If verbose=false, returns a list of added peers only.
+getnetworkinfo		Returns information about the network ports to which the local node is connected, and its local IP addresses.
+getpeerinfo		Returns information about the peers to which this node is connected. If this is a MultiChain blockchain, includes handshake and handshakelocal fields showing the remote and local address used during the handshaking for each connection.
+liststorednodes	(includeOldIgnores=false)	Returns a list of known peer node IP addresses and listening ports, including each peer’s previous handshake addresses and the timestamp of recent failed or successful connections. In the output, source indicates how each peer was discovered, with values seed (command line parameter), added or stored (via storenode command) or peers (from other nodes). The status field can be inbound/outbound (currently connected), tryconnect (the local node is trying to connect) or ignore (local node will not initiate connections). Requires MultiChain 2.3 or later.
+ping		Sends a ping message to all connected peers to measure network latency and backlog. The results are received asynchronously and retrieved from the pingtime field of the response to getpeerinfo.
+storenode	ip(:port)
+Adds an IP address and listening port to the list of known peer nodes. The ip can be an IPv4 address, IPv4-as-IPv6 address or IPv6 address. If port is omitted then the blockchain's default network port is used. Pass tryconnect in command (or omit the parameter) to try to connect to this peer, or ignore to stop initiating connections to a known peer. The ignore status will be preserved unless a successful incoming connection is received from that peer. Requires MultiChain 2.3 or later.
+Messaging signing and verification
+signmessage	address|privkey
+message	Returns a base64-encoded digital signature which proves that message was approved by the owner of address (which must belong to this wallet) or any other private key given in privkey. The signature can be verified by any node using the verifymessage command.
+verifymessage	address signature
+message	Verifies that message was approved by the owner of address by checking the base64-encoded digital signature provided by a previous call to signmessage. The result is true or false unless an error occurred.
+Querying the blockchain
+getblock	hash|height
+(verbose=1)	Returns information about the block with hash (retrievable from getblockhash) or at the given height in the active chain. Set verbose to 0 or false for the block in raw hexadecimal form. Set to 1 or true for a block summary including the miner address and a list of txids. Set to 2 to 3 to include more information about each transaction and its raw hexadecimal. Set to 4 to include a full description of each transaction, formatted like the output of decoderawtransaction.
+getblockchaininfo		Returns information about the blockchain, including the bestblockhash of the most recent block on the active chain, which can be compared across nodes to check if they are perfectly synchronized.
+getblockhash	height	Returns the hash of the block at the given height. This can be passed to getblock to get information about the block.
+getchaintotals		Returns a count of different types of entities on the blockchain. If the explorersupport runtime parameter is set, this includes a count of addresses and transactions.
+getlastblockinfo	(skip=0)	Returns information about the last or recent blocks in the active chain. Omit skip or set to 0 for information about the most recent block. Pass 1 for the block before that, and so on. This command can also be used as a Smart Filter callback and provides less information than listblocks or getblock.
+getmempoolinfo		Returns information about the memory pool, which contains transactions that the node has seen and validated, but which have not yet been confirmed on the active chain. If the memory pool is growing continuously, this suggests that transactions are being generated faster than the network is able to process them.
+getrawmempool		Returns a list of transaction IDs which are in the node's memory pool (see getmempoolinfo).
+getrawtransaction	txid (verbose=0)	If verbose is 1, returns a JSON object describing transaction txid. This may fail with an error for some transactions if the runtime parameter txindex=0. For a MultiChain blockchain, each transaction output includes assets and permissions fields listing any assets or permission changes encoded within that output. There will also be a data field listing the content of any OP_RETURN outputs in the transaction.
+gettxout	txid vout
+(unconfirmed=false)	Returns details about an unspent transaction output vout of txid. For a MultiChain blockchain, includes assets and permissions fields listing any assets or permission changes encoded within the output. Set unconfirmed to true to include unconfirmed transaction outputs.
+listblocks	blocks
+(verbose=false)	Returns information about the blocks specified, on the active chain only. The blocks parameter can contain a comma-delimited list or array of block heights, hashes, height ranges (e.g. 100-200) or -n for the most recent n blocks. Alternatively, pass an object {"starttime":...,"endtime":...} for blocks whose timestamps are in the given range.
+listminers	(verbose=false)	Returns information about miners on the blockchain. For each relevant address, permitted shows if it currently has effective mine permissions (this may differ from the output of listpermissions if a change was not yet confirmed), diversitywaitblocks indicates how many blocks it must wait due to the mining-diversity blockchain parameter and lastmined shows the last block it mined. More detailed information is provided for each address's global chainstate, as well as its localstate if the node has the private key for this address (islocal=true). Set verbose=true to see the currently confirmed range of blocks for which the address has mine permissions.
+Binary cache
+createbinarycache		This creates a new empty item in the binary cache. The binary cache allows large pieces of data (as raw metadata or in stream items) to be written and read from a chain, using the file system directly instead of huge JSON-RPC API requests. Returns a unique textual identifier for the item. This is also the name of the corresponding file in the cache subdirectory of the blockchain directory, which can be safely modified by external processes.
+appendbinarycache	identifier
+data-hex	Appends the hexadecimal data in data-hex to the binary cache item named identifier, and returns its resulting size. Pass the empty string in data-hex to obtain the item's current size.
+deletebinarycache	identifier	Removes the item named identifier from the binary cache, and the corresponding file.
+txouttobinarycache	identifier
+txid vout
+(count-bytes=INT_MAX)
+(start-byte=0)	Extracts the binary data embedded or referenced (for off-chain stream items) in output vout of transaction txid to the binary cache item named identifier, and returns its resulting size. The binary cache item must currently be empty. Use the count-bytes and start-byte parameters to retrieve only part of the data.
+Advanced wallet control
+backupwallet	filename	Creates a backup of the wallet.dat file in which the node's private keys and watch-only addresses are stored. The backup is created in file filename. Use with caution – any node with access to this file can perform any action restricted to this node's addresses.
+dumpprivkey	address	Returns the private key associated with address in this node's wallet. Use with caution – any node with access to this private key can perform any action restricted to the address.
+dumpwallet	filename	Dumps the entire set of private keys in the wallet into a human-readable text format in file filename. Use with caution – any node with access to this file can perform any action restricted to this node's addresses.
+encryptwallet	passphrase	This encrypts the node's wallet for the first time, using passphrase as the password for unlocking. Once encryption is complete, the wallet's private keys can no longer be retrieved directly from the wallet.dat file on disk, and MultiChain will stop and need to be restarted. Use with caution – once a wallet has been encrypted it cannot be permanently unencrypted, and must be unlocked for signing transactions with the walletpassphrase command. In a permissioned blockchain, MultiChain will also require the wallet to be unlocked before it can connect to other nodes, or sign blocks that it has created.
+getwalletinfo		Returns information about the node's wallet, including txcount showing the number of transactions and stream keys (name preserved for compatibility) and utxocount showing the number of tracked unspent transaction outputs. If the wallet has been encrypted and unlocked, it also shows when it is unlocked_until.
+importprivkey	privkey(s) (label)
+(rescan=true)	Adds a privkey private key (or an array thereof) to the wallet, together with its associated public address. The rescan parameter controls whether and how the blockchain is rescanned for transactions relating to all wallet addresses, including these new ones. Pass true to rescan the entire chain, false to skip rescanning, and from version 1.0.5, a positive integer to rescan from that block number or a negative integer to rescan that many recent blocks. Returns null if successful.
+importwallet	filename
+(rescan=0)	Imports the entire set of private keys which were previously dumped (using dumpwallet) into file filename into the wallet, together with their associated public addresses. From version 1.0.5, the rescan parameter controls whether and how the blockchain is rescanned for transactions relating to all wallet addresses, including these new ones. Pass zero or a positive integer to rescan from that block number or a negative integer to rescan that many recent blocks. Versions prior to 1.0.5 always perform a full rescan.
+walletlock		This immediately relocks the node's wallet, independent of the timeout provided by a previous call to walletpassphrase.
+walletpassphrase	passphrase timeout	This uses passphrase (as set in earlier calls to encryptwallet or walletpassphrasechange) to unlock the node's wallet for signing transactions for the next timeout seconds. In a permissioned blockchain, this will also need to be called before the node can connect to other nodes or sign blocks that it has created.
+walletpassphrasechange	old-passphrase
+new-passphrase	This changes the wallet's password from old-passphrase to new-passphrase.
+Working with feeds (MultiChain Enterprise only)
+addtofeed	feed entities
+(globals="")
+(action=rescan)
+(options)	Available in MultiChain Enterprise only. Adds one or more subscriptions to feed. In entities, pass a stream name, ref or creation txid to add one stream, an array thereof for multiple streams, or "" or [] not to add streams. In globals, pass blocks to add block events, otherwise pass "" or none. If action is rescan, the blockchain will first be rescanned to write all historical events for the new subscription(s) to the feed. If action is start, no rescan will take place and only new events will be written. If action is suspend, the new subscription(s) will be suspended with no events written for now. Pass an object in options to configure the new subscription(s) – see help feed-options for a list of options.
+createfeed	feed (params)	Available in MultiChain Enterprise only. Creates a new feed named feed and its directory. The purpose of feeds is to allow stream items or the list of blocks to be replicated in real-time to an external database, for flexible querying and analytics. MultiChain writes the events for a feed in an efficient binary format to consecutively numbered files in the feed directory, where the file number increments daily (or when a file exceeds 128 MB). These files can be read by any external tool – for example, the MultiChain Feed Adapter is written in Python, supports several databases and can be easily modified to add more. By default, a feed uses the directory ~/.multichain/[chain-name]/feeds/[feed-name] but this can be changed by passing {"directory":"/path/to/dir"} in params.
+datareftobinarycache	identifier dataref
+(count-bytes=INT_MAX)
+(start-byte=0)	Available in MultiChain Enterprise only. Extracts the binary data represented by dataref in a feed file to the binary cache item named identifier, and returns its resulting size. The binary cache item must currently be empty. Use the count-bytes and start-byte parameters to retrieve only part of the data.
+deletefeed	feed (force=false)	Available in MultiChain Enterprise only. Deletes feed and its directory. This normally requires all feed files to be purged and all feed subscriptions to be suspended, but set force to true to bypass those checks.
+getdatarefdata	dataref
+(count-bytes=INT_MAX)
+(start-byte=0)	Available in MultiChain Enterprise only. Returns the data represented by dataref in a feed file. This is particularly useful if a stream item's data was not written to the feed files due to the maxshowndata setting for the feed. For binary data only, use the count-bytes and start-byte parameters to retrieve part of the data.
+listfeeds	(feeds=*)
+(verbose=false)	Available in MultiChain Enterprise only. Returns information about feeds set up in the node. Pass a feed name in feeds to retrieve information about one feed only, an array thereof for multiple feeds, or * for all feeds.
+pausefeed	feed (buffer=true)	Available in MultiChain Enterprise only. Pauses writing to the directory for feed. If buffer is true, feed events will be written in a temporary directory and can be copied into the regular directory when resumefeed is called.
+purgefeed	feed file|days|*	Available in MultiChain Enterprise only. Removes old files from feed to free up disk space. In the file|days|* parameter, pass a non-negative number to specify the first file number to keep. (This will usually be the number of the feed file currently being read.) Pass a negative number to purge files older than the specified number of days. Pass * to purge all files and write from the start of file number zero.
+resumefeed	feed (buffer=true)	Available in MultiChain Enterprise only. Resumes writing to the directory for feed. If buffer is true, events written to the temporary directory when the feed was paused will be copied into the regular directory before the feed is resumed.
+updatefeed	feed entities
+(globals="")
+(action=none)
+(options)	Available in MultiChain Enterprise only. Updates, rescans or removes one or more subscriptions in feed. In entities, pass a stream name, ref or creation txid to affect one subscribed stream, an array thereof for multiple streams, * for all subscribed streams, or "" or [] to ignore all streams. In globals, pass blocks to affect the blocks subscription, * for the blocks subscription if it exists, or "" or none to ignore any blocks subscription. The following values may be passed in action to apply to the specified subscription(s):
+none allows options to be updated and does nothing else.
+rescan rescans the blockchain to write all historical events for the subscription(s) to the feed, skipping any subscriptions that are suspended.
+sync rescans subscription(s) that are not suspended and which are not in sync (this means that some of their events may never have been written to the feed).
+suspend suspends the subscription(s) from writing to the feed.
+start unsuspends the subscription(s).
+delete removes the subscription(s) from the feed.
+start,rescan and start,sync combine two operations.
+Independent of the action, you can also pass an object in options to configure the specified subscription(s) – see help feed-options for a list of options. If entities=*, any options relating to streams will apply for the entire feed, otherwise they will apply to the specified stream(s) only. (If entities=*, include "override":true in the options object to remove any per-stream options that conflict.)
+
+Smart filters and upgrades – more about filters and upgrades
+approvefrom	from-address
+entity approve	Approves or disapproves the specified upgrade or filter from from-address. The entity specifies an upgrade using its name or creation txid, or a filter using its name, ref or creation txid. When approving or disapproving an upgrade or global transaction filter, pass true or false in the approve parameter as appropriate. When approving or disapproving a stream filter for a stream, pass a {"for":stream,"approve":true|false} object instead, where stream is the stream's name, ref or creation txid. Returns the txid of the approval transaction sent.
+create	type=streamfilter
+name
+options
+js-code	Creates a new stream filter on the blockchain called name. Pass the value "streamfilter" in the type parameter (the create API can also be used to create other things). The options parameter is a JSON object with one optional element – to access one or more libraries in the filter code, include "libraries":["library1","library2"] where each library is a library name, ref or creation txid. (Stream filters are not created for specific streams, but are rather approved on a per-stream basis by each stream's administrator.) Pass the JavaScript code for the filter itself in js-code – see Smart Filters for more details. Note that an address requires create permissions to create a stream filter. Returns the txid of the transaction creating the filter.
+create	type=txfilter
+name
+options
+js-code	Creates a new (as yet unapproved) transaction filter on the blockchain called name. Pass the value "txfilter" in the type parameter (the create API can also be used to create other things). The options parameter is a JSON object with two optional elements, for and libraries. To only apply the filter for transactions referencing a particular asset or stream, include "for":"entity", where entity is an asset or stream name, ref or creation txid. To apply for multiple entities, include "for":["entity1","entity2",...]. To access one or more libraries in the filter code, include "libraries":["library1","library2"] where each library is a library name, ref or creation txid. Pass the JavaScript code for the filter itself in js-code – see Smart Filters for more details. Note that an address requires both admin and create permissions to create a transaction filter. Returns the txid of the transaction creating the filter.
+create	type=upgrade
+name open=false
+params	Creates a new (as yet unapproved) upgrade on the blockchain called name. Pass the value "upgrade" in the type parameter (the create API can also be used to create streams and filters) and false for the open parameter. Pass an object in params with the blockchain parameters to change, e.g. {"protocol-version":20005,"target-block-time":20}. As of the most recent protocol version, the following parameters can be upgraded: protocol-version target-block-time maximum-block-size maximum-chunk-size maximum-chunk-count, all max-std-* and all anyone-can-* except mine and admin. To prevent abrupt changes in blockchain capacity and performance, target-block-time cannot be changed more than once per 100 blocks and all capacity-related parameters cannot be changed to less than half or more than double their previous size. To create an upgrade that is applied from a specific block height, include "startblock":12345 in the params object. Note that an address requires both admin and create permissions to create an upgrade. Returns the txid of the transaction creating the upgrade.
+createfrom	from-address type
+name ...	This works like create, but with control over the from-address used to create the filter or upgrade. It is useful if the node has multiple addresses with the appropriate permissions.
+getfiltercode	filter	Returns the JavaScript code for a transaction or stream filter, where filter is the filter name, ref or creation txid.
+liststreamfilters	(filters=*)
+(verbose=false)	Returns information about stream filters on the blockchain. Pass a filter name, ref or creation txid in filters to retrieve information about one filter only, an array thereof for multiple filters, or * for all stream filters. The response includes information on whether each filter can be compiled successfully. Set verbose to true to see each filter's creators.
+listtxfilters	(filters=*)
+(verbose=false)	Returns information about transaction filters on the blockchain, whether pending or approved. Pass a filter name, ref or creation txid in filters to retrieve information about one filter only, an array thereof for multiple filters, or * for all transaction filters. The response includes information on whether each filter can be compiled successfully and whether it has been approved by consensus. Set verbose to true to see each filter's creators, which admins have approved it so far, and pending approval changes.
+listupgrades	(upgrades=*)	Returns information about upgrades on the blockchain, whether pending or approved. Pass an upgrade name or creation txid in upgrades to retrieve information about one upgrade only, an array thereof for multiple upgrades, or * for all upgrades. The response includes information on whether each upgrade has been approved by consensus, which admins have approved it so far, how many more admins are required to reach consensus, and the appliedblock where the upgrade became active.
+runstreamfilter	filter
+(tx-hex|txid)
+(vout)	This works like teststreamfilter, but tests a stream filter already created on the blockchain, where filter is the filter name, ref or creation txid.
+runtxfilter	filter
+(tx-hex|txid)	This works like testtxfilter, but tests a transaction filter already created on the blockchain, where filter is the filter name, ref or creation txid.
+teststreamfilter	restrictions
+js-code
+(tx-hex|txid)
+(vout)	Tests a stream filter before it is created on the blockchain. See create streamfilter for a description of the restrictions and js-code parameters. If no tx-hex or txid is passed, only compilation is tested, with compiled in the response indicating success, and reason containing the error if compilation failed. If a raw transaction or the id of a previous transaction containing a stream item is passed in tx-hex|txid, the stream item is also tested against the compiled filter. (If the transaction contains multiple stream items, pass the appropriate output index in vout.) In the response, passed indicates whether the item passed the filter, and reason contains the reason (given by the filter) if not. The response also contains a log of callbacks made by the filter, including their responses, and the time it took to run.
+testtxfilter	restrictions
+js-code
+(tx-hex|txid)	Tests a transaction filter before it is created on the blockchain. See create txfilter for a description of the restrictions and js-code parameters. If no tx-hex or txid is passed, only compilation is tested, with compiled in the response indicating success, and reason containing the error if compilation failed. If a raw transaction or the id of a previous transaction is passed in tx-hex|txid, the transaction is also tested against the compiled filter. In the response, passed indicates whether the transaction passed the filter, and reason contains the reason (given by the filter) if not. The response also contains a log of callbacks made by the filter, including their responses, and the time it took to run.
+Libraries and variables
+addlibraryupdate	library updatename
+js-code	Adds a new update to library, specified as the library name, ref or creation txid. Pass the name of the update in updatename and the new Javascript code (which fully replaces the old code) in js-code. The update will be applied instantly or subject to admin approval, depending on the updatemode specified when the library was created. Note that an address requires per-library write permissions to update a library. Returns the txid of the transaction adding the update.
+addlibraryupdatefrom	from-address library
+updatename js-code	This works like addlibraryupdate, but with control over the from-address used to add the update. It is useful if the node has multiple addresses with per-library write permissions.
+approvefrom	from-address
+library approve	Approves or disapproves an update from from-address for library, passed as the library name, ref or creation txid. Pass an {"updatename":updatename,"approve":true|false} object in approve to approve or disapprove updatename as appropriate. The last created update approved by admin consensus (see the admin-consensus-txfilter blockchain parameter) is applied. Returns the txid of the approval transaction sent.
+create	type=library name
+options js-code	Creates a new library on the blockchain called name. Pass the value "library" in the type parameter (the create API can also be used to create other things). Set options to {"updatemode":"mode"}, where mode is one of none, instant or approve. If none, the library code cannot be updated after creation. If instant, library updates can be added using addlibraryupdate(from) and are applied immediately. If approve, library updates must be approved by administrator consensus using approvefrom before they are applied. Pass the initial Javascript code for the library in js-code. Note that an address requires create permissions to create a library. Returns the txid of the transaction creating the library.
+create	type=variable name
+(open=true)
+(value=null)	Creates a new variable on the blockchain called name. Pass the value "variable" in the type parameter (the create API can also be used to create other things). Optionally pass true in the open parameter and the initial value, otherwise the variable is set to null. The value can be any valid JSON structure, including objects and arrays, and is retrieved using the getvariable* APIs and Smart Filter callbacks. Note that an address requires create permissions to create a variable. Returns the txid of the transaction creating the variable.
+createfrom	from-address type
+name ...	This works like create, but with control over the from-address used to create the library or variable. It is useful if the node has multiple addresses with the appropriate permissions.
+getlibrarycode	library (updatename)	Returns the JavaScript code for library, passed as the library name, ref or creation txid. If updatename is specified, then the code for that update is returned, otherwise the currently active code is returned (use "" to refer to the initial code at library creation).
+getvariablehistory	variable
+(verbose=false)
+(count=MAX)
+(start=-count)	Lists the historical values of variable, passed as a variable name, ref or creation txid. The list includes information about the writers which set the variable's values – set verbose to true for additional information about the related transactions. Use count and start to retrieve part of the list only, with negative start values (like the default) indicating the most recent values. This command can also be used as a Smart Filter callback.
+getvariableinfo	variable
+(verbose=false)	Returns information about a single variable created on the blockchain, where variable is the name, ref or creation txid. Set verbose to true for information about the last transaction that wrote to the variable. This command can also be used as a Smart Filter callback.
+getvariablevalue	variable	Retrieves the latest value of variable, passed as a variable name, ref or creation txid. This command can also be used as a Smart Filter callback.
+listlibraries	(libraries=*)
+(verbose=false)	Returns information about libraries created on the blockchain. Pass a library name, ref or creation txid in libraries to retrieve information about one library only, an array thereof for multiple libraries, or * for all libraries. Set verbose to true to see the list of each library's approved or pending updates.
+listvariables	(variables=*)
+(verbose=false)
+(count=MAX)
+(start=-count)	Returns information about variables created on the blockchain. Pass a variable name, ref or creation txid in variables to retrieve information about one variable only, an array thereof for multiple variables, or * for all variables. Set verbose to true for more information about the last value written to each variable. Use count and start to retrieve part of the list only, with negative start values (like the default) indicating the most recently created variables.
+setvariablevalue	variable (value=null)	Sets the value of variable, passed as a variable name, ref or creation txid. The value can be any valid JSON structure, including objects and arrays. The variable will be set to null if value is omitted. Note that an address requires per-variable write permissions to set a variable. Returns the txid of the transaction setting the variable.
+setvariablevaluefrom	from-address
+variable (value=null)	This works like setvariablevalue, but with control over the from-address used to set the variable. It is useful if the node has multiple addresses with per-variable write permissions.
+testlibrary	(library)
+(updatename)
+(js-code)	Manages testing of libraries and updates on the local node, without making changes to the blockchain. Test code is only used when calling testtxfilter, runtxfilter, teststreamfilter and runstreamfilter and is lost when the node is restarted.
+To create a new temporary library (for testtxfilter and teststreamfilter only), pass the name in library, any updatename and the Javascript code in js-code.
+To create a new temporary update of an existing library, pass the library name, ref or creation txid in library, the new update name in updatename and the code for testing (which fully replaces the old code) in js-code.
+To test an existing update of a library, pass the library and updatename.
+To clear all test code for one library, pass the library and no other parameters.
+To clear all test code for all libraries, pass * in library and no other parameters.
+To retrieve information only, pass no parameters at all.
+In all cases, the full current list of libraries and updates in testing is returned.
+
+Advanced node control
+clearmempool		Removes all unconfirmed transactions from this node's memory pool. This can only be called after pause incoming,mining. Successful if no error is returned.
+getchunkqueueinfo		Returns information about the queue for retrieving off-chain stream items, providing both a count of chunks and the total number of bytes represented by each state. Chunks can be waiting in the queue, querying across the network, or retrieving from a specific node.
+getchunkqueuetotals		Returns cumulative statistics on queries and requests for off-chain stream items sent out by this node, and their outcomes. The API provides both a count of chunks and the total number of bytes represented by each outcome. Of the queries sent out to find a chunk in the network, it shows how many were successfully responded and how many were unresponded (no positive response before timeout). Of the requests for delivery sent to specific nodes, it shows how many were successfully delivered, and how many were undelivered (no delivery before timeout) or baddelivered (mismatching data delivered).
+pause	tasks	Pauses the specified tasks, specified as a comma-delimited list of mining (generating blocks), incoming (processing of incoming blocks and transactions) and/or offchain (requesting, relaying or delivering off-chain stream items). Successful if no error is returned.
+resume	tasks	Resumes the specified tasks, specified as in the pause command. Successful if no error is returned.
+setlastblock	hash|height	Rewinds this node's active chain to height or rewinds/switches to another block with hash. This can only be called after pause incoming,mining. Returns the hash of the last block in the chain after the change.
+MultiChain Enterprise licensing
+getlicenserequest		Available in MultiChain Enterprise only. Returns the hexadecimal string that we require in order to generate your license code. This string is also required when using transferlicense.
+activatelicense	confirmation-hex	Available in MultiChain Enterprise only. Activates the license confirmation that we provided to you in confirmation-hex. Returns the txid of the activation transaction.
+listlicenses	(licenses=*)
+(verbose=false)	Available in MultiChain Enterprise only. Returns information about licenses installed on this node. Pass a license name in licenses to retrieve information about one license only, an array thereof for multiple licenses, or * for all licenses.
+transferlicense	license
+request-hex	Available in MultiChain Enterprise only. Transfers a license from this node to another node connected to the same blockchain. Pass the name of the license to transfer in license and the output of the other node's getlicenserequest in request-hex. Returns the txid of the transfer transaction.
+Amounts parameter forms
+All amounts parameters specify the content of a single transaction output and can take any of the following forms:
+
+A quantity of the native blockchain currency only, e.g. 0.01
+A single regular (fungible) asset quantity, e.g. {"asset1":50}
+A single non-fungible token quantity, e.g. {"asset1":{"token":"token1","qty":5}}
+Multiple regular asset quantities, e.g. {"asset1":50,"asset2":1.5}
+Multiple non-fungible tokens, e.g. {"asset1":[{"token":"token1","qty":5},{"token":"token2","qty":10}]}
+Asset(s) and/or token(s) with native currency specified with a "", e.g. {"asset1":{"token":"token1","qty":5},"asset2":1.5,"":0.01}
+Asset(s), token(s) and/or native currency with binary inline metadata, e.g. {"asset1":{"token":"token1","qty":5},"data":"a1b2c3d4"}
+Asset(s), token(s) and/or native currency with textual inline metadata, e.g. {"asset1":50,"data":{"text":"hello"}}
+Asset(s), token(s) and/or native currency with JSON inline metadata, e.g. {"":0.01,"asset1":50,"data":{"json":[1,2,3]}}
+Within these forms, assets can be specified using their name, ref or issuance txid. Note that inline metadata sits within a regular transaction output that can contain spendable assets. This is different from regular transaction metadata or stream items which sit in a separate output that cannot be spent.
+
+Metadata parameter forms
+All metadata parameters can take any of the following forms:
+
+Raw binary metadata in hexadecimal, e.g. a1b2c3d4
+Raw metadata from the binary cache, e.g. {"cache":"Ev1HQV1aUCY"}
+Raw textual metadata, e.g. {"text":"hello world"}
+Raw JSON metadata, e.g. {"json":{"i":[1,2],"j":"yes"}}
+A binary stream item in hexadecimal, e.g. {"for":"stream1","keys":["key1","key2"],"data":"a1b2c3d4"}
+A binary stream item from the cache, e.g. {"for":"stream1","keys":["key1","key2"],"data"{"cache":"Ev1HQV1aUCY"}}
+A textual stream item, e.g. {"for":"stream1","keys":["key1","key2"],"data":{"text":"hello"}}
+A JSON stream item, e.g. {"for":"stream1","keys":["key1"],"data":{"json":{"i":[1,2]}}}
+In all stream item forms, a single key can be passed using "key":"key1" instead of "keys":["key1","key2"]. In addition, all stream item forms can include an optional "options":"offchain" field to publish their data off-chain.
+
+Incompatible changes from MultiChain 1.0
+The MultiChain 2.x API is close to 100% backwards compatible with applications built on MultiChain 1.0.x. Nonetheless, some enhancements cause inevitable changes, and a major release is a good time to deprecate unclear input formats and shorten responses that were too verbose.
+
+Below is a full list of incompatible changes introduced in the transition from MultiChain 1.0 to 2.x. To continue including all MultiChain 1.0 fields to remain in 2.x API responses, set the runtime parameter v1apicompatible=1.
+
+When viewing stream items, key is replaced by keys showing an array of item keys. (If v1apicompatible=1 then key still shows the first key.) Note that when specifying stream items in various APIs, a single key or array can still be used, and key and keys can be used interchangeably.
+When listing streams, or viewing a transaction which created a stream, the open field is superceded by the write field of the restrict subelement (with the boolean opposite value).
+When viewing a wallet transaction, the payload of stream items is not duplicated in the top-level data element.
+When decoding a raw transaction, empty assets, permissions and items arrays for individual outputs are not shown.
+When decoding a raw transaction, the payload of raw metadata or stream items is not duplicated in a top-level data element.
+When using raw transactions to issue an asset, "create":"asset" must be stated in the data element.
+When using raw transactions to perform a follow-on asset issuance, "update":[asset-identifier] must be stated in the data element.
+A note about accounts
+MultiChain supports all commands in the Bitcoin Core API (as of version 0.10), except those which relate to external mining hardware and Bitcoin Core's "accounts" mechanism. In Bitcoin Core's "accounts", each address can belong to specific account, which is credited when bitcoin is sent to that address. However the separation of accounts is not preserved when bitcoin is sent out, because the internal accounting mechanism has no relationship to the bitcoin protocol itself. Because of all the confusion this has caused, Bitcoin Core's accounts mechanism is to be deprecated in future.
+
+MultiChain does not support Bitcoin Core's account APIs, if you are using the new wallet version which is activated by default (walletdbversion=2 in the output from getinfo). This includes the commands: getaccount getaccountaddress getreceivedbyaccount listreceivedbyaccount move sendfrom sendmany setaccount. In addition it only supports an empty value for the account parameter of: addmultisigaddress getaddressesbyaccount getbalance getnewaddress. If you are using the old wallet version, MultiChain preserves full backwards compatibility with the Bitcoin Core API, but (a) sendfrom is renamed to sendfromaccount, and (b) the accounts mechanism is not applied to native asset balances, all of which are considered as belonging to a single global account.
+
+Overall we recommend not using accounts at all with MultiChain, and using "" for any account parameter in the API. Instead, to support multiple users in a single MultiChain node's wallet, call getnewaddress to get a different address for each user. You should then use MultiChain's from APIs, such as sendassetfrom and sendfrom, to control whose funds are spent in each transaction. Unlike bitcoin-style accounts, this method maps directly to the blockchain protocol.
+
