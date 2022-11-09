@@ -1,0 +1,18 @@
+MultiChain handshaking protocol
+For MultiChain blockchains, the version and verack messages in the bitcoin protocol are replaced with three messages (version, verack and verackack) which perform the following additional functions:
+
+Check both peers are on a blockchain with the same name.
+If necessary, download the blockchain parameters from the other side, otherwise check both are using identical parameters.
+Each node identifies a public address which has connection permissions and for which it has the private key.
+Each node sends a challenge message to the other node which it must sign using the private key corresponding to the address it presented.
+Support for bitcoin protocol handshaking
+If a MultiChain chain has anyone-can-connect set to true in the blockchain parameters, then MultiChain nodes will also accept incoming connections from wallets that use regular bitcoin-style handshaking, without the extra stages above. This can be helpful if you want to connect to a MultiChain network from a regular bitcoin (e.g. mobile) wallet. However you should note the following caveats:
+
+Change the wallet’s connection port to the default-network-port set in the blockchain parameters.
+Ensure the wallet accepts the protocol-version which is defined on your chain, or remove the check completely to allow your protocol to be upgraded in future.
+Before starting the chain, set network-message-start=f9beb4d9 in the blockchain parameters, to match bitcoin’s peer-to-peer protocol.
+The bitcoin wallet will choke on MultiChain addresses, so you should also configure the chain to use bitcoin-style addresses by setting address-pubkeyhash-version=00, address-scripthash-version=05, private-key-version=80, address-checksum-value=00000000 in the blockchain parameters.
+Depending on the wallet in question, it may also not like other aspects of the blockchain which are different to bitcoin’s, such as the content of the genesis block, the block reward schedule and non-standard transactions. So you might want to start by using the bitcoin-compatible params file for your blockchain parameters, and making only minor modifications from there, such as the chain-name, default-network-port and global permissions. The chain-name must match the name of the chain’s directory inside ~/.multichain/.
+The wallet’s interface will be focused on the native blockchain currency, rather than any native assets issued on the chain. This also means that it will build transactions incorrectly if they contain native assets in their inputs.
+See also these instructions for creating a bitcoin-style network using MultiChain, with no native assets or permissions.
+
