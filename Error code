@@ -1,0 +1,61 @@
+If an error occurs when processing a MultiChain API request, an error code is returned in a standard JSON-RPC error object. This object has two fields – code containing a numerical identifier for the error, and message containing a verbal description of its cause.
+
+If you are using multichain-cli, both the error code and message will be displayed in the terminal window. If you are using the JSON-RPC API directly, your application should catch these errors and deal with them as appropriate.
+
+In production releases of MultiChain, your application can assume that the code identifier for each type of error will not change. However the message strings are likely to change in future versions of MultiChain, and your application should not assume otherwise.
+
+A full list of error codes and their meaning is provided below, alongside the name used for the error in MultiChain’s source code.
+
+JSON-RPC processing errors
+Code	Name	Description
+-32600	RPC_INVALID_REQUEST	The JSON sent is not a valid JSON-RPC request object.
+-32601	RPC_METHOD_NOT_FOUND	The method specified in the JSON-RPC request is not available in MultiChain.
+-32602	RPC_INVALID_PARAMS	The parameters provided in the JSON-RPC request are not valid for the method that was called. In practice, this is not used – see instead RPC_INVALID_PARAMETER below.
+-32603	RPC_INTERNAL_ERROR	An internal error occurred while processing the JSON-RPC request (you should report this to us).
+-32700	RPC_PARSE_ERROR	The message sent cannot be parsed as a JSON-formatted string.
+General application errors (from Bitcoin Core)
+-1	RPC_MISC_ERROR	A general exception occurred.
+-2	RPC_FORBIDDEN_BY_SAFE_MODE	MultiChain is in safe mode (not documented), and this command is not allowed in safe mode.
+-3	RPC_TYPE_ERROR	An unexpected type was passed as a parameter.
+-5	RPC_INVALID_ADDRESS_OR_KEY	An invalid address, public key or private key was passed as a parameter.
+-7	RPC_OUT_OF_MEMORY	MultiChain ran out of memory while performing the operation.
+-8	RPC_INVALID_PARAMETER	An invalid value was passed as a parameter.
+-20	RPC_DATABASE_ERROR	An error occurred in MultiChain’s internal database (you should report this to us).
+-22	RPC_DESERIALIZATION_ERROR	Error in parsing or validating a data structure that was provided in hexadecimal or base64 format.
+-25	RPC_TRANSACTION_ERROR	General error while verifying a submitted transaction or block (for now, if not signed properly).
+-26	RPC_TRANSACTION_REJECTED	Transaction or block was rejected by the blockchain network’s rules.
+-27	RPC_TRANSACTION_ALREADY_IN_CHAIN	Transaction rejected because it is already in the blockchain.
+-28	RPC_IN_WARMUP	MultiChain is still warming up and cannot yet response to this request.
+General application errors (MultiChain specific)
+-701	RPC_NOT_ALLOWED	The requested action is not permitted for the entity or blockchain.
+-702	RPC_NOT_SUPPORTED	Action is not supported under these blockchain parameters or runtime parameters.
+-703	RPC_NOT_SUBSCRIBED	This node is not subscribed to the specified asset or stream.
+-704	RPC_INSUFFICIENT_PERMISSIONS	Address has insufficient permissions for the operation requested.
+-705	RPC_DUPLICATE_NAME	An entity with this name already exists on the blockchain.
+-706	RPC_UNCONFIRMED_ENTITY	The referred entity has not yet been confirmed (relevant for deprecated protocols).
+-707	RPC_EXCHANGE_ERROR	An invalid exchange transaction was passed to one of the exchange APIs.
+-708	RPC_ENTITY_NOT_FOUND	The asset or stream reference in an API request or transaction was not found.
+-709	RPC_WALLET_ADDRESS_NOT_FOUND	The address provided was not found in the local node’s wallet.
+-710	RPC_TX_NOT_FOUND	The specified transaction (by txid) was not found.
+-711	RPC_BLOCK_NOT_FOUND	The specified block (by height or hash) was not found.
+-712	RPC_OUTPUT_NOT_FOUND	The specified (unspent) transaction output was not found.
+-713	RPC_OUTPUT_NOT_DATA	The specified transaction output does not contain any metadata to retrieve.
+-714	RPC_INPUTS_NOT_MINE	None of the inputs in this transaction (to be disabled) belong to this node’s wallet.
+-715	RPC_WALLET_OUTPUT_NOT_FOUND	The specified (unspent) transaction output was not found in this node’s wallet.
+-716	RPC_WALLET_NO_UNSPENT_OUTPUTS	This node’s wallet contains no unspent outputs for creating a new transaction.
+-717	RPC_GENERAL_FILE_ERROR	An error occurred when accessing the file path provided.
+-718	RPC_UPGRADE_REQUIRED	This blockchain has been upgraded and requires a more recent version of MultiChain.
+Peer-to-peer client errors
+-9	RPC_CLIENT_NOT_CONNECTED	Operation not allowed because MultiChain is not connected to any other nodes.
+-10	RPC_CLIENT_IN_INITIAL_DOWNLOAD	Operation not allowed because MultiChain is still downloading the initial block chain.
+-23	RPC_CLIENT_NODE_ALREADY_ADDED	The node requested to be manually added has already been added before.
+-24	RPC_CLIENT_NODE_NOT_ADDED	This node was not manually added, so the requested information cannot be provided.
+Wallet errors
+-4	RPC_WALLET_ERROR	A general error occurred with the node’s wallet (you should report this to us).
+-6	RPC_WALLET_INSUFFICIENT_FUNDS	The wallet or address has insufficient funds for this transaction.
+-11	RPC_WALLET_INVALID_ACCOUNT_NAME	An invalid account name was specified (note that accounts are deprecated).
+-12	RPC_WALLET_KEYPOOL_RAN_OUT	The wallet’s key pool ran out (please report this to us).
+-13	RPC_WALLET_UNLOCK_NEEDED	This operation requires the wallet to be unlocked using the walletpassphrase command.
+-14	RPC_WALLET_PASSPHRASE_INCORRECT	An incorrect wallet passphrase was provided.
+-15	RPC_WALLET_WRONG_ENC_STATE	A command was given in the wrong wallet encryption state.
+-16	RPC_WALLET_ENCRYPTION_FAILED	The wallet could not be encypted (you should report this to us).
